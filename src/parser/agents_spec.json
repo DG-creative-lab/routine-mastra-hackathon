@@ -1,0 +1,135 @@
+{
+  "search_bid_guardian": {
+    "tagline": "Lower Google Ads bids whenever ROAS falls below a KPI threshold.",
+    "workflow_brief": [
+      "ga4.pull → check.threshold → gAds.updateBid(-20%)"
+    ],
+    "required_features": {
+      "threshold_cfg": "ROAS floor (default 3)",
+      "logging": "Bid deltas & timestamps"
+    },
+    "success_metrics": {
+      "roi_saving": "$ > 50 k / qtr",
+      "alert_fatigue": "↓ manual checks by 80 %"
+    },
+    "timeline": { "mvp": "Q4 2025" },
+    "tools": {
+      "ga4.pull": {
+        "title": "Pull GA4 ROAS",
+        "inputs":  { "lookback": "string", "metrics": "string[]" },
+        "outputs": { "roas": "number" }
+      },
+      "compute.check": {
+        "title": "Compare ROAS to threshold",
+        "inputs":  { "roas": "number", "threshold": "number" },
+        "outputs": { "flag": "string" }
+      },
+      "gAds.updateBid": {
+        "title": "Lower Google Ads bid",
+        "inputs":  { "campaignId": "number", "percent": "number" },
+        "outputs": { "newBid": "number" }
+      }
+    }
+  },
+
+
+  "dv360_deal_optimiser": {
+    "tagline": "Patch DV360 deal bids when CPM deviates > 15 % from baseline.",
+    "workflow_brief": [
+      "dv360.stats → compute.delta → dv360.patchBid"
+    ],
+    "required_features": {
+      "baseline_store": "BigQuery table of accepted CPM",
+      "delta_logic": "±15 % guard-rail"
+    },
+    "success_metrics": {
+      "cpm_control": "±5 % band",
+      "media_saving": "$ > 75 k / qtr"
+    },
+    "timeline": { "mvp": "Q4 2025" },
+    "tools": {
+      "dv360.stats": {
+        "title": "Fetch DV360 deal stats",
+        "inputs":  { "dealId": "string", "window": "string" },
+        "outputs": { "avgCpm": "number" }
+      },
+      "compute.delta": {
+        "title": "Δ CPM vs baseline",
+        "inputs":  { "current": "number", "baseline": "number" },
+        "outputs": { "pctChange": "number", "action": "string" }
+      },
+      "dv360.patchBid": {
+        "title": "Update deal bid",
+        "inputs":  { "dealId": "string", "adjustPct": "number" },
+        "outputs": { "newBid": "number" }
+      }
+    }
+  },
+
+  "meta_fatigue_swapper": {
+    "tagline": "Rotate creatives when frequency > 6 or audience < 50 k.",
+    "workflow_brief": [
+      "meta.pullMetrics → fatigue.check → meta.swapCreative"
+    ],
+    "required_features": {
+      "freq_cap": "6",
+      "min_audience": "50 k"
+    },
+    "success_metrics": {
+      "ctr_drop": "≤ 5 %",
+      "cpa_increase": "≤ 3 %"
+    },
+    "timeline": { "mvp": "Q4 2025" },
+    "tools": {
+      "meta.pullMetrics": {
+        "title": "Get Meta ad-set metrics",
+        "inputs":  { "adsetId": "string" },
+        "outputs": { "freq": "number", "audSize": "number" }
+      },
+      "fatigue.check": {
+        "title": "Flag fatigue",
+        "inputs":  { "freq": "number", "audSize": "number" },
+        "outputs": { "shouldSwap": "boolean" }
+      },
+      "meta.swapCreative": {
+        "title": "Swap in next creative",
+        "inputs":  { "adsetId": "string", "assetId": "string" },
+        "outputs": { "status": "string" }
+      }
+    }
+  },
+
+
+  "amc_lookalike_builder": {
+    "tagline": "Weekly pipeline that builds SKU-seeded look-alikes in AMC.",
+    "workflow_brief": [
+      "amc.queryPurchasers → amc.createLookAlike → amc.exportAudience"
+    ],
+    "required_features": {
+      "sku_seed": "≥ 100 purchasers",
+      "la_size": "2× seed"
+    },
+    "success_metrics": {
+      "aud_ready": "Every Mon 08:00",
+      "roas_lift": "≥ 10 %"
+    },
+    "timeline": { "mvp": "Q1 2026" },
+    "tools": {
+      "amc.queryPurchasers": {
+        "title": "Query SKU purchasers",
+        "inputs":  { "sku": "string", "windowDays": "number" },
+        "outputs": { "userIds": "string[]" }
+      },
+      "amc.createLookAlike": {
+        "title": "Create AMC look-alike",
+        "inputs":  { "seedIds": "string[]", "sizeFactor": "number" },
+        "outputs": { "audienceId": "string" }
+      },
+      "amc.exportAudience": {
+        "title": "Export to Ads console",
+        "inputs":  { "audienceId": "string" },
+        "outputs": { "status": "string" }
+      }
+    }
+  }
+}

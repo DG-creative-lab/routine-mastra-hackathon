@@ -1,0 +1,61 @@
+# ───── Core Node / TypeScript ──────────────────────────────────────────────
+node_modules/
+dist/
+build/
+.tmp/
+.cache/
+
+# Compiled TypeScript output
+*.js
+*.js.map
+*.d.ts
+*.cjs
+
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+yarn.lock      
+package-lock.json
+
+# Runtime data
+*.sqlite
+*.sqlite3
+*.log
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment / secrets
+.env*
+!.env.example   # keep template for docs
+
+# Mastra CLI artefacts
+.mastracache/
+.mastratmp/
+
+# Test output
+coverage/
+*.lcov
+
+# Storybook / docs builds
+storybook-static/
+docs/.vitepress/dist/
+
+# Optional: ignore screenshots or videos unless needed
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.mp4
+!.docs/assets/**     
+
+# scsfold from the planner
+
+./generated-templates/

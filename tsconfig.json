@@ -1,0 +1,48 @@
+// tsconfig.json
+{
+  "compilerOptions": {
+    /* ——— Output & Modules ——— */
+    "target": "ES2020",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": ".",                // allow imports from /src and /app
+    "outDir": "dist",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "sourceMap": true,
+    "inlineSources": true,
+
+    /* ——— Strictness ——— */
+    "strict": true,
+    "noImplicitAny": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "skipLibCheck": true,
+
+    /* ——— Path Aliases ——— */
+    "baseUrl": ".",
+    "paths": {
+      "@/*":                   ["src/*"],
+      "@/parser/*":           ["src/parser/*"],
+      "@/meta-planner/*":     ["src/meta-planner/*"],
+      "@/template-builder/*": ["src/template-builder/*"],
+      "@/tools/*":            ["src/tools/*"],
+      "@/utils/*":            ["src/utils/*"]
+    },
+
+    /* ——— Runtime Types & Libs ——— */
+    "types": ["node"],
+    "lib": ["ES2020"]
+  },
+
+  "include": [
+    "src/**/*",   // your service code
+    "app/**/*",   // Next.js routes / components
+    "*.ts"        // root scripts if any
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "generated-templates"
+  ]
+}

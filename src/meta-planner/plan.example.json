@@ -1,0 +1,63 @@
+[
+  {
+    "id": 1,
+    "tool": "file.readJson",
+    "description": "Load the 4-agent starter spec (src/specs/agents_spec.json",
+    "inputs": { "path": "./src/specs/agents_spec.json" },
+    "outputs": ["specObj"]
+  },
+  {
+    "id": 2,
+    "tool": "parser.normaliseSpec",
+    "description": "Validate & normalise YAML/JSON into canonical schema",
+    "inputs": { "spec": "$1.specObj" },
+    "outputs": ["canonicalSpec"]
+  },
+  {
+    "id": 3,
+    "tool": "llm.categoriseRequirements",
+    "description": "Group features into Agent types (planner, executor, critic, tool)",
+    "inputs": {
+      "spec": "$2.canonicalSpec",
+      "model": "horizon-beta",
+      "temperature": 0.2
+    },
+    "outputs": ["agentMap"]
+  },
+  {
+    "id": 4,
+    "tool": "template.generateRoutinePlans",
+    "description": "Emit Routine JSON plans per agent category",
+    "inputs": { "agentMap": "$3.agentMap" },
+    "outputs": ["routinePlans"]
+  },
+  {
+    "id": 5,
+    "tool": "template.generateMastraTemplates",
+    "description": "Convert each Routine plan → Mastra template folder scaffold",
+    "inputs": {
+      "routinePlans": "$4.routinePlans",
+      "targetDir": "./generated-templates"
+    },
+    "outputs": ["templatePaths"]
+  },
+  {
+    "id": 6,
+    "tool": "report.summarise",
+    "description": "Create README summary & next-step checklist",
+    "inputs": {
+      "templatePaths": "$5.templatePaths",
+      "spec": "$2.canonicalSpec"
+    },
+    "outputs": ["summaryMd"]
+  },
+  {
+    "id": 7,
+    "tool": "file.write",
+    "description": "Save summary into generated-templates/README.md",
+    "inputs": {
+      "path": "./generated-templates/README.md",
+      "content": "$6.summaryMd"
+    }
+  }
+]
