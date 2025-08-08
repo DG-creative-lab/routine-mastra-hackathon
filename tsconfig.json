@@ -5,49 +5,81 @@
     "target": "ES2020",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "rootDir": ".",                // allow imports from /src and /app
+    "rootDir": ".", // allow imports from /src and /app
     "outDir": "dist",
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "sourceMap": true,
     "inlineSources": true,
-
     /* ——— Strictness ——— */
     "strict": true,
     "noImplicitAny": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "skipLibCheck": true,
-
     /* ——— Path Aliases ——— */
     "baseUrl": ".",
     "paths": {
-     "@/*":                        ["src/*"],
-
-     /* bare-folder imports */
-     "@/parser":                  ["src/parser/index.ts"],
-     "@/meta-planner":            ["src/meta-planner/index.ts"],
-     "@/template-builder":        ["src/template-builder/index.ts"],
-     "@/tools":                   ["src/tools/index.ts"],
-     "@/utils":                   ["src/utils/index.ts"],
-
-     /* wildcard imports */
-     "@/parser/*":                ["src/parser/*"],
-     "@/meta-planner/*":          ["src/meta-planner/*"],
-     "@/template-builder/*":      ["src/template-builder/*"],
-     "@/tools/*":                 ["src/tools/*"],
-     "@/utils/*":                 ["src/utils/*"]
+      "@/*": [
+        "src/*"
+      ],
+      /* bare-folder imports */
+      "@/parser": [
+        "src/parser/index.ts"
+      ],
+      "@/meta-planner": [
+        "src/meta-planner/index.ts"
+      ],
+      "@/template-builder": [
+        "src/template-builder/index.ts"
+      ],
+      "@/tools": [
+        "src/tools/index.ts"
+      ],
+      "@/utils": [
+        "src/utils/index.ts"
+      ],
+      /* wildcard imports */
+      "@/parser/*": [
+        "src/parser/*"
+      ],
+      "@/meta-planner/*": [
+        "src/meta-planner/*"
+      ],
+      "@/template-builder/*": [
+        "src/template-builder/*"
+      ],
+      "@/tools/*": [
+        "src/tools/*"
+      ],
+      "@/utils/*": [
+        "src/utils/*"
+      ]
     },
-
     /* ——— Runtime Types & Libs ——— */
-    "types": ["node"],
-    "lib": ["ES2020"]
+    "types": [
+      "node"
+    ],
+    "lib": [
+      "ES2020"
+    ],
+    "allowJs": true,
+    "noEmit": true,
+    "incremental": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
   },
-
   "include": [
-    "src/**/*",   // your service code
-    "app/**/*",   // Next.js routes / components
-    "*.ts"        // root scripts if any
+    "*.ts", // your service code
+    "app/**/*", // Next.js routes / components
+    "src/**/*" // root scripts if any
+    ,
+    ".next/types/**/*.ts"
   ],
   "exclude": [
     "dist",

@@ -14,4 +14,4 @@ export { zipDirToStream } from "./zip";
 // ───────────────────────────────────────────────────────────────
 // (Later) Logger, etc.
 // ───────────────────────────────────────────────────────────────
-// export { logger } from "./logger";
+ export { logger } from "./logger";

@@ -1,4 +1,4 @@
-// src/template-builder/scaffolders.ts
+
 import type { RoutinePlan, ToolBinding } from "./types";
 
 export function file_planJson(planRaw: string) {

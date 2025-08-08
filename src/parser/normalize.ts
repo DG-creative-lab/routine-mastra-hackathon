@@ -15,7 +15,6 @@ const canonKey = (k: string) => k.trim().toLowerCase().replace(/\s+/g, "_");
 
 /** Normalise one AgentSpec --------------------------------------- */
 export const normaliseAgentSpec = (raw: AgentSpec): AgentSpec => {
-  // deep-clone to avoid side-effects
   const spec: AgentSpec = JSON.parse(JSON.stringify(raw));
 
   /* 1. Canonicalise required_features keys */
