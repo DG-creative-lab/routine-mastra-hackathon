@@ -256,22 +256,3 @@ pnpm test       # Vitest – validates schema & plan round-trip
   /utils/fsTree.ts          ← helper to read dir → JSON tree
   /utils/zip.ts             ← helper to zip a dir
 ```
-
-## 🙌 Contributing / Hackathon Checklist
-	•	Add a new specs/*.json
-	•	pnpm meta-build <spec> – ensure template compiles
-	•	pnpm meta-dev ./templates/<name> – manual smoke test
-	•	Commit, push & PR with label #hackathon
-
-----
-
-Useful Links
-	•	📰 Routine News Brief – https://performics.ai/news/routine-structured-llm-planning
-	•	📊 Deep Analysis – https://performics.ai/analysis/routine-agentic-marketing-framework
-	•	🛠 Mastra Docs – https://mastra.ai/en/docs
-	•	🎥 Templates Walk-through – https://www.youtube.com/watch?v=MbSXBLWAhy0
-
-----
-
-Happy building – see you in the #mastra-build Slack & on demo day!
-— Performics Labs

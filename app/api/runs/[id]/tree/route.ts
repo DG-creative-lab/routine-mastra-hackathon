@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildTree } from "@/src/utils/fsTree";
+import { buildTree } from "@/utils/fsTree";
 import path from "path";
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {

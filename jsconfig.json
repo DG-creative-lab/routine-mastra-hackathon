@@ -1,9 +1,23 @@
-
+// jsconfig.json
 {
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+
+      /* bare module names */
+      "@/parser":           ["src/parser/index.ts"],
+      "@/meta-planner":     ["src/meta-planner/index.ts"],
+      "@/template-builder": ["src/template-builder/index.ts"],
+      "@/tools":            ["src/tools/index.ts"],
+      "@/utils":            ["src/utils/index.ts"],
+
+      /* wildcards */
+      "@/parser/*":           ["src/parser/*"],
+      "@/meta-planner/*":     ["src/meta-planner/*"],
+      "@/template-builder/*": ["src/template-builder/*"],
+      "@/tools/*":            ["src/tools/*"],
+      "@/utils/*":            ["src/utils/*"]
     }
   },
   "include": ["next-env.d.ts", "app/**/*", "src/**/*"]

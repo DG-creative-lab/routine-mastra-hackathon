@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
-import { parseSpec } from "@/src/parser";
-import { categoriseWithLLM, buildRoutinePlan } from "@/src/meta-planner";
-import { buildFromPlan } from "@/src/template-builder/scaffolder";
-import { buildTree } from "@/src/utils/fsTree";
+import { parseSpec } from "@/parser";
+import { categoriseWithLLM, buildRoutinePlan } from "@/meta-planner";
+import { buildFromPlan } from "@/template-builder/scaffolder";
+import { buildTree } from "@/utils/fsTree";
 
 export async function POST(req: NextRequest) {
   try {
