@@ -6,18 +6,18 @@
   "engines": {
     "node": ">=18.0.0"
   },
-    "scripts": {
-    "dev":      "next dev -p 3000",
-    "build":    "next build",
-    "start":    "next start",
-    "meta":     "ts-node src/meta-planner/planner.ts",
-    "parse":    "ts-node src/parser/index.ts src/parser/agents_spec.json",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start",
+    "meta": "ts-node src/meta-planner/planner.ts",
+    "parse": "ts-node src/parser/index.ts src/parser/agents_spec.json",
     "template": "ts-node src/template-builder/run.ts",
-    "mastra:dev":    "mastra dev ./generated-templates",
+    "mastra:dev": "mastra dev ./generated-templates",
     "mastra:deploy": "mastra deploy ./generated-templates",
     "typecheck": "tsc --noEmit",
-    "lint":      "eslint . --ext .ts,.tsx",
-    "format":    "prettier --write ."
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@google-analytics/data": "^5.2.0",
@@ -36,6 +36,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/archiver": "^6.0.3",
     "@types/node": "^20.11.19",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
