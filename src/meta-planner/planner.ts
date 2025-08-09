@@ -1,106 +1,91 @@
-// --------------------------------------------------------------
-// Purpose: Generate (or regenerate) `plan.json` automatically
-//          from a human-written `agents_spec.json` file.
-// Usage:   pnpm ts-node meta-planner/planner.ts
-// Env:     Requires OPENROUTER_API_KEY (.env loaded via dotenv)
-// --------------------------------------------------------------
-
-import * as fs from "fs/promises";
-import path from "path";
-import dotenv from "dotenv";
 import OpenAI from "openai";
 import { SYSTEM_PROMPT, buildUserPrompt } from "./prompt";
 import { CanonicalSpec, RoutineStep } from "../types/cannonical";
 
-dotenv.config();
+// ---------- NEW TYPES ----------
+export type AgentRole = "planner" | "executor" | "critic" | "observer";
 
-// ────────────────────────────────────────────────────────────
-// Config & helper paths
-// ────────────────────────────────────────────────────────────
-const ROOT          = path.resolve(__dirname, "..");                // src/
-const SPEC_PATH     = path.join(ROOT, "parser/agents_spec.json");
-const GENERATED_DIR = path.join(ROOT, "..", "generated-templates");
-const OUTPUT_PLAN   = path.join(GENERATED_DIR, "plan.json");
+export type AgentSpecItem = {
+  role: AgentRole;
+  name: string;
+  instructions?: string;
+  tools_allowed?: string[];
+  kpis?: string[];
+  guardrails?: string[];
+  routine_steps?: RoutineStep[]; // only planner will include steps
+};
 
-const MODEL_ID = "openrouter/horizon-beta";
+export type AgentSpec = {
+  channel_id: string;      // e.g. "search_bid_guardian"
+  agents: AgentSpecItem[];
+};
 
-// ────────────────────────────────────────────────────────────
-// Utility – read & normalise the agents_spec.json
-// ────────────────────────────────────────────────────────────
-async function loadAndNormaliseSpec(): Promise<CanonicalSpec[]> {
-  const raw = await fs.readFile(SPEC_PATH, "utf-8");
-  const parsed = JSON.parse(raw) as Record<string, any>;
+export type PlannerOutput = {
+  agent_specs: AgentSpec[];
+};
 
-  return Object.entries(parsed).map(([id, value]) => ({
-    id,
-    tagline: value.tagline,
-    required_features: value.required_features,
-    success_metrics: value.success_metrics,
-    timeline: value.timeline,
-  }));
+// ---------- UTILS ----------
+function safeJsonParse(s: string): any {
+  try {
+    // strip code fences if any
+    const trimmed = s.trim().replace(/^```(json)?\n?/i, "").replace(/```$/, "");
+    return JSON.parse(trimmed);
+  } catch (e) {
+    throw new Error("LLM did not return valid JSON for agent_specs.");
+  }
 }
 
-// ────────────────────────────────────────────────────────────
-// Call LLM to categorise → agent buckets
-// ────────────────────────────────────────────────────────────
-export async function categoriseWithLLM(
-  spec: CanonicalSpec[]
-): Promise<Record<string, string[]>> {
+// ---------- NEW: makeAgentSpecs ----------
+export async function makeAgentSpecs(spec: CanonicalSpec): Promise<PlannerOutput> {
   const openai = new OpenAI({
     baseURL: "https://openrouter.ai/api/v1",
     apiKey: process.env.OPENROUTER_API_KEY!,
   });
 
   const completion = await openai.chat.completions.create({
-    model: MODEL_ID,
+    model: "openrouter/horizon-beta",
     temperature: 0.2,
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user",   content: buildUserPrompt(spec) },
+      { role: "system", content: SYSTEM_PROMPT },       // must instruct to return { agent_specs: [...] }
+      { role: "user", content: buildUserPrompt(spec) }, // pass CanonicalSpec[] with tools/workflow_brief
     ],
   });
 
-  const content = completion.choices[0].message.content || "{}";
-  return JSON.parse(content);
+  const content = completion.choices[0]?.message?.content ?? "{}";
+  const parsed = safeJsonParse(content);
+
+  // basic shape guard
+  if (!parsed || !Array.isArray(parsed.agent_specs)) {
+    throw new Error("agent_specs missing or not an array in planner output.");
+  }
+
+  return parsed as PlannerOutput;
 }
 
-// ────────────────────────────────────────────────────────────
-// Build the Routine plan programmatically
-// ────────────────────────────────────────────────────────────
-export function buildRoutinePlan(agentBuckets: unknown): RoutineStep[] {
+// ---------- NEW: flatten sub-agent plans → RoutineStep[] ----------
+export function flattenToRoutinePlan(out: PlannerOutput): RoutineStep[] {
+  const steps: RoutineStep[] = [];
   let id = 1;
-  return [
-    { id: id++, tool: "fs.readJson", inputs: { path: SPEC_PATH }, outputs: ["specObj"] },
-    { id: id++, tool: "spec.normalize", inputs: { spec: "$1.specObj" }, outputs: ["canonicalSpec"] },
-    { id: id++, tool: "llm.classifyReqs", inputs: { jsonSpec: "$2.canonicalSpec", llm: MODEL_ID, temp: 0.2 }, outputs: ["agentBuckets"] },
-    { id: id++, tool: "constant.set", inputs: { value: agentBuckets }, outputs: ["agentBucketsStatic"] },
-    { id: id++, tool: "routine.planMaker", inputs: { agentBuckets: "$4.agentBucketsStatic" }, outputs: ["routinePlans"] },
-    { id: id++, tool: "mastra.scaffold", inputs: { plans: "$5.routinePlans", outDir: GENERATED_DIR }, outputs: ["paths"] },
-    { id: id++, tool: "docs.generateSummary", inputs: { templatePaths: "$6.paths", spec: "$2.canonicalSpec" }, outputs: ["readme"] },
-    { id: id++, tool: "fs.writeFile", inputs: { path: path.join(GENERATED_DIR, "README.md"), data: "$7.readme" } },
-  ];
-}
 
-// ────────────────────────────────────────────────────────────
-// Convenience helper: load → categorize → buildPlan
-// ────────────────────────────────────────────────────────────
-export async function makePlan(): Promise<RoutineStep[]> {
-  const spec      = await loadAndNormaliseSpec();
-  const buckets   = await categoriseWithLLM(spec);
-  const routine   = buildRoutinePlan(buckets);
-  
-  await fs.mkdir(GENERATED_DIR, { recursive: true });
-  await fs.writeFile(OUTPUT_PLAN, JSON.stringify(routine, null, 2), "utf-8");
+  for (const ch of out.agent_specs) {
+    const planner = ch.agents.find(a => a.role === "planner");
+    if (!planner?.routine_steps?.length) continue;
 
-  return routine;
-}
+    for (const s of planner.routine_steps) {
+      steps.push({
+        ...s,
+        id: id++,
+        // keep original if present; otherwise carry over tool/inputs/outputs/condition
+        tool: s.tool,
+        inputs: s.inputs ?? {},
+        outputs: s.outputs ?? [],
+        condition: s.condition,
+        // optional: tag step with agent/channel for middleware/logs
+        // @ts-ignore
+        agent: `${ch.channel_id}:planner`,
+      });
+    }
+  }
 
-// If invoked directly, write out plan.json and exit
-if (require.main === module) {
-  makePlan()
-    .then(() => console.log("✅  plan.json generated in", GENERATED_DIR))
-    .catch(err => {
-      console.error(err);
-      process.exit(1);
-    });
+  return steps;
 }

@@ -52,6 +52,9 @@
       "@/tools/*": [
         "src/tools/*"
       ],
+      "@/components/*": [
+        "app/components/*"
+      ],
       "@/utils/*": [
         "src/utils/*"
       ]

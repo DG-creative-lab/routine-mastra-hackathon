@@ -1,26 +1,38 @@
+// src/template-builder/types.ts
+import type { PlannerOutput } from "@/meta-planner/planner";
+
 export type RoutineStep = {
   id: number;
-  tool: string;                     // e.g., "ga4.pull"
-  description?: string;
-  inputs?: Record<string, any>;     // unresolved (may contain $ refs)
-  outputs?: string[];               // names e.g., ["rows"]
-  condition?: string;               // e.g., "$2.flag == 'low'"
+  tool: string;
+  inputs?: Record<string, any>;
+  outputs?: string[];
+  condition?: string;
+  // optional tag added by meta-planner flattener
+  agent?: string;
 };
 
 export type RoutinePlan = RoutineStep[];
 
 export type ToolBinding = {
-  id: string;                       // "ga4.pull"
-  importName: string;               // symbol to import in workflow.ts
-  importPath: string;               // from generated folder to your tools index
-  // How to invoke the tool. Receive a JS expression string for the inputs object.
-  // Return JS that evaluates to a Promise<any> (the tool result).
+  /** tool id in the plan, e.g. "ga4.pull" */
+  id: string;
+  /** import symbol used in workflow.ts, e.g. ga4Pull */
+  importName: string;
+  /** import path for the tool, e.g. "@/tools/ga4.pull" */
+  importPath: string;
+  /** how to invoke the tool: receives a JS expression for inputs */
   invoke: (inputsExpr: string) => string;
 };
 
+/**
+ * Build options:
+ * - You may provide `planPath` (read from disk) OR `plan` (inline object).
+ * - `agentSpecs` is optional; if present we'll emit agents.json as well.
+ */
 export type BuildOptions = {
-  outDir: string;                   // folder to generate into
-  planPath: string;                 // path to plan.json
-  templateName?: string;            // e.g., "search-bid-guardian"
-  title?: string;                   // readme title
+  planPath?: string;
+  plan?: RoutinePlan;
+  outDir: string;
+  title?: string;
+  agentSpecs?: PlannerOutput;
 };
