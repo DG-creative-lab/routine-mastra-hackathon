@@ -1,19 +1,14 @@
 import type { ToolBinding } from "./types";
 
-/**
- * We import from your consolidated tools barrel: src/tools/index.ts
- * The generated workflow will reference these imports.
- */
 const TOOLS_BARREL_PATH = "../../src/tools";
 
-/** Known bindings (extend as you add tools) */
 export const TOOL_REGISTRY: Record<string, ToolBinding> = {
-  // ── Search
+  // Search
   "ga4.pull": {
     id: "ga4.pull",
     importName: "ga4Pull",
     importPath: TOOLS_BARREL_PATH,
-    invoke: (inputs) => `await ga4Pull(${inputs})`, // ga4Pull is a plain fn(input)->Promise
+    invoke: (inputs) => `await ga4Pull(${inputs})`,
   },
   "compute.check": {
     id: "compute.check",
@@ -28,7 +23,7 @@ export const TOOL_REGISTRY: Record<string, ToolBinding> = {
     invoke: (inputs) => `await gAdsUpdateBid.execute({ context: ${inputs} })`,
   },
 
-  // ── DV360
+  // DV360
   "dv360.fetchStats": {
     id: "dv360.fetchStats",
     importName: "dv360FetchStats",
@@ -60,7 +55,7 @@ export const TOOL_REGISTRY: Record<string, ToolBinding> = {
     invoke: (inputs) => `await bigqueryLogDealPatch.execute({ context: ${inputs} })`,
   },
 
-  // ── Meta
+  // Meta
   "meta.pullAdsetMetrics": {
     id: "meta.pullAdsetMetrics",
     importName: "metaPullAdsetMetrics",
@@ -80,7 +75,7 @@ export const TOOL_REGISTRY: Record<string, ToolBinding> = {
     invoke: (inputs) => `await metaSwapCreative.execute({ context: ${inputs} })`,
   },
 
-  // ── AMC
+  // AMC
   "amc.fetchPurchasers": {
     id: "amc.fetchPurchasers",
     importName: "amcFetchPurchasers",

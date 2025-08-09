@@ -1,76 +1,133 @@
-/*  ----------------------
-    Centralised prompt builder used by `planner.ts` when we ask
-    the LLM to sort each requirement into
-    four Routine buckets: **planner · executor · critic · tools**.
-
-    - Keeps the natural-language strings in one file  
-    - Makes it easier to tweak few-shot examples without touching
-      the orchestration code
-*/
-
+// src/meta-planner/prompt.ts
 import { CanonicalSpec } from "../types/cannonical";
 
-
-/*──────────────────────────────────────────────────────────────┐
-  System prompt – never changes unless our taxonomy changes.
- └──────────────────────────────────────────────────────────────*/
 export const SYSTEM_PROMPT = `
-You are *ArchitectGPT* — an AI systems-designer that converts
-marketing requirements into Routine-style agent blueprints and
-Mastra workflow templates.
+You are *ArchitectGPT* — design Routine-style multi-agent systems for marketing,
+and emit a machine-consumable JSON spec for each channel.
 
-Routine (Yan et al., 2025) in one line:
-  “Generate an explicit, step-by-step JSON plan, then execute it
-  with typed parameter passing and optional critics.”
+Return **JSON ONLY** with this shape:
 
-• Output *valid JSON only* – no prose, no markdown.  
-• Top-level keys **must** be: "planner", "executor", "critic", "tools".  
-• Each key holds an **array of requirement IDs** (strings).  
-• A requirement ID may appear under multiple keys if needed.
+{
+  "agent_specs": [
+    {
+      "channel_id": "slug_like_this",
+      "agents": [
+        {
+          "role": "planner",
+          "name": "Planner",
+          "instructions": "short sentence about planning policy",
+          "routine_steps": [
+            { "tool": "tool.id", "inputs": { "...": "..." }, "outputs": ["name"], "condition": "optional string" }
+          ]
+        },
+        {
+          "role": "executor",
+          "name": "Executor",
+          "instructions": "how to run tools safely",
+          "tools_allowed": ["tool.id", "..."],
+          "kpis": ["optional_kpi_names"]
+        },
+        {
+          "role": "critic",
+          "name": "Critic",
+          "guardrails": [
+            { "type": "bound_change_pct", "tool": "gAds.updateBid", "maxAbsPct": 25 },
+            { "type": "gate_on_flag", "flagFrom": "compute.check.flag", "equals": "low" },
+            { "type": "require_inputs", "tool": "gAds.updateBid", "keys": ["campaignId","percent"] }
+          ],
+          "kpis": ["roas","bid_delta_pct"]
+        },
+        {
+          "role": "observer",
+          "name": "Observer",
+          "observer": {
+            "sinks": [ { "type": "console" }, { "type": "jsonl", "path": ".runs/observer-events.jsonl" } ],
+            "events": ["plan_started","plan_finished","step_started","step_finished","tool_called","tool_result","critic_failure","reward"],
+            "kpis": ["roas","bid_delta_pct"]
+          }
+        }
+      ]
+    }
+  ]
+}
+
+**Rules**
+- Use ONLY tools listed in the input spec per channel.
+- Keep routine_steps short (≤7) and reflect workflow_brief.
+- Use the spec's critic_hints / observer_hints / kpis when present.
+- No prose. If unsure about sinks, choose [console, jsonl].
 `.trim();
 
-/*──────────────────────────────────────────────────────────────┐
-  Few-shot: 1️⃣ very small spec ➜ 1️⃣ expected bucket result.
- └──────────────────────────────────────────────────────────────*/
-const FEW_SHOT_EXAMPLE = `
-### Spec
+export function buildUserPrompt(specs: CanonicalSpec[]): string {
+  const pretty = JSON.stringify(specs, null, 2);
+  // minimal few-shot inline (search guardian)
+  const fewshot = `
+### Example
+Input (1 channel, abbreviated):
 [
   {
-    "id": "search_monitoring_prediction",
-    "tagline": "Proactive monitoring …",
-    "required_features": { "core_capability": "KPI thresholds" },
-    "success_metrics": {},
-    "timeline": {}
+    "id": "search_bid_guardian",
+    "workflow_brief": ["ga4.pull → compute.check → gAds.updateBid(-20%)"],
+    "tools": {
+      "ga4.pull": {}, "compute.check": {}, "gAds.updateBid": {}
+    },
+    "critic_hints": { "max_bid_change_pct": 25, "only_when_flag": "low" },
+    "observer_hints": { "sinks": [{"type":"console"}] },
+    "kpis": ["roas","bid_delta_pct"]
   }
 ]
 
-### ExpectedBuckets
+Output:
 {
-  "planner":   ["search_monitoring_prediction"],
-  "executor":  ["search_monitoring_prediction"],
-  "critic":    ["search_monitoring_prediction"],
-  "tools":     ["search_monitoring_prediction"]
+  "agent_specs": [
+    {
+      "channel_id": "search_bid_guardian",
+      "agents": [
+        {
+          "role": "planner",
+          "name": "Planner",
+          "routine_steps": [
+            { "tool": "ga4.pull",       "inputs": {"lookbackDays": 1}, "outputs": ["rows"] },
+            { "tool": "compute.check",  "inputs": {"roas":  "$1.rows[0].roas", "threshold": 3}, "outputs": ["flag"] },
+            { "tool": "gAds.updateBid", "inputs": {"campaignId": 123, "percent": -20}, "outputs": ["oldMicros","newMicros"], "condition": "$2.flag == 'low'" }
+          ]
+        },
+        {
+          "role": "executor",
+          "name": "Executor",
+          "tools_allowed": ["ga4.pull","compute.check","gAds.updateBid"],
+          "kpis": ["roas","bid_delta_pct"]
+        },
+        {
+          "role": "critic",
+          "name": "Critic",
+          "guardrails": [
+            { "type": "bound_change_pct", "tool": "gAds.updateBid", "maxAbsPct": 25 },
+            { "type": "gate_on_flag", "flagFrom": "compute.check.flag", "equals": "low" },
+            { "type": "require_inputs", "tool": "gAds.updateBid", "keys": ["campaignId","percent"] }
+          ]
+        },
+        {
+          "role": "observer",
+          "name": "Observer",
+          "observer": { "sinks": [{"type":"console"},{"type":"jsonl"}], "events": ["step_started","step_finished"], "kpis": ["roas","bid_delta_pct"] }
+        }
+      ]
+    }
+  ]
 }
 `.trim();
 
-/*──────────────────────────────────────────────────────────────┐
-  Builds the *user* prompt for an arbitrary CanonicalSpec array.
- └──────────────────────────────────────────────────────────────*/
-export function buildUserPrompt(spec: CanonicalSpec[]): string {
-  const prettyJson = JSON.stringify(spec, null, 2);
-
   return `
-You will receive **CanonicalSpec[]** JSON.
+You will receive an array of CanonicalSpec objects describing channels and their tools.
 
-Your job:
-  1. Inspect each "id".
-  2. Decide which Routine bucket(s) the requirement belongs to.
-  3. Produce *only JSON* (see ExpectedBuckets example).
+Return the **agent_specs** JSON as per the schema above.
 
-\\\`\\\`\\\`json
-${prettyJson}
-\\\`\\\`\\\`
+INPUT_SPEC:
+\`\`\`json
+${pretty}
+\`\`\`
 
-${FEW_SHOT_EXAMPLE}
+${fewshot}
 `.trim();
 }

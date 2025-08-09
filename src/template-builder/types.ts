@@ -1,4 +1,3 @@
-// src/template-builder/types.ts
 import type { PlannerOutput } from "@/meta-planner/planner";
 
 export type RoutineStep = {
@@ -7,32 +6,42 @@ export type RoutineStep = {
   inputs?: Record<string, any>;
   outputs?: string[];
   condition?: string;
-  // optional tag added by meta-planner flattener
-  agent?: string;
+  agent?: string; // optional tag from meta-planner
 };
 
 export type RoutinePlan = RoutineStep[];
 
+/** What we pass into scaffolders to bind real tools */
 export type ToolBinding = {
-  /** tool id in the plan, e.g. "ga4.pull" */
   id: string;
-  /** import symbol used in workflow.ts, e.g. ga4Pull */
   importName: string;
-  /** import path for the tool, e.g. "@/tools/ga4.pull" */
   importPath: string;
-  /** how to invoke the tool: receives a JS expression for inputs */
   invoke: (inputsExpr: string) => string;
 };
 
-/**
- * Build options:
- * - You may provide `planPath` (read from disk) OR `plan` (inline object).
- * - `agentSpecs` is optional; if present we'll emit agents.json as well.
- */
+/** Optional critic/observer shapes (kept permissive on purpose) */
+export type CriticRule = {
+  id: string;
+  name: string;
+  when?: string;           // boolean expression, can reference ctx
+  severity?: "error" | "warn";
+  action?: string;         // message or small hint
+  description?: string;
+};
+
+export type ObserverSpec = {
+  counters?: string[];
+  gauges?: string[];
+  events?: string[];
+  notes?: string;
+};
+
 export type BuildOptions = {
   planPath?: string;
   plan?: RoutinePlan;
   outDir: string;
   title?: string;
+
+  /** full meta-planner output (we’ll emit agents.json and derive critics/observer) */
   agentSpecs?: PlannerOutput;
 };

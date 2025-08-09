@@ -2,8 +2,9 @@
   "search_bid_guardian": {
     "tagline": "Lower Google Ads bids whenever ROAS falls below a KPI threshold.",
     "workflow_brief": [
-      "ga4.pull → check.threshold → gAds.updateBid(-20%)"
+      "ga4.pull → compute.check → gAds.updateBid(-20%)"
     ],
+
     "required_features": {
       "threshold_cfg": "ROAS floor (default 3)",
       "logging": "Bid deltas & timestamps"
@@ -13,31 +14,46 @@
       "alert_fatigue": "↓ manual checks by 80 %"
     },
     "timeline": { "mvp": "Q4 2025" },
+
     "tools": {
       "ga4.pull": {
         "title": "Pull GA4 ROAS",
-        "inputs":  { "lookback": "string", "metrics": "string[]" },
-        "outputs": { "roas": "number" }
+        "inputs":  { "lookbackDays": "number", "metrics": "string[]", "dimensions": "string[]" },
+        "outputs": { "rows": "Array<Record<string, number|string>>" }
       },
       "compute.check": {
         "title": "Compare ROAS to threshold",
         "inputs":  { "roas": "number", "threshold": "number" },
-        "outputs": { "flag": "string" }
+        "outputs": { "flag": "low|ok" }
       },
       "gAds.updateBid": {
         "title": "Lower Google Ads bid",
         "inputs":  { "campaignId": "number", "percent": "number" },
-        "outputs": { "newBid": "number" }
+        "outputs": { "oldMicros": "number", "newMicros": "number" }
       }
+    },
+
+    "kpis": ["roas", "bid_delta_pct", "cpc"],
+    "critic_hints": {
+      "max_bid_change_pct": 25,
+      "only_when_flag": "low",
+      "require_inputs": ["campaignId", "percent"]
+    },
+    "observer_hints": {
+      "events": ["plan_started","plan_finished","step_started","step_finished","tool_called","tool_result","reward"],
+      "sinks": [
+        { "type": "console" },
+        { "type": "jsonl", "path": ".runs/observer-events.jsonl" }
+      ]
     }
   },
-
 
   "dv360_deal_optimiser": {
     "tagline": "Patch DV360 deal bids when CPM deviates > 15 % from baseline.",
     "workflow_brief": [
-      "dv360.stats → compute.delta → dv360.patchBid"
+      "dv360.fetchStats → compute.deltaCpm → compute.checkInflation → dv360.patchDealBid"
     ],
+
     "required_features": {
       "baseline_store": "BigQuery table of accepted CPM",
       "delta_logic": "±15 % guard-rail"
@@ -47,30 +63,47 @@
       "media_saving": "$ > 75 k / qtr"
     },
     "timeline": { "mvp": "Q4 2025" },
+
     "tools": {
-      "dv360.stats": {
-        "title": "Fetch DV360 deal stats",
-        "inputs":  { "dealId": "string", "window": "string" },
+      "dv360.fetchStats": {
+        "title": "Fetch DV360 deal 7-day CPM",
+        "inputs":  { "dealIds": "string[]", "lookbackDays": "number" },
         "outputs": { "avgCpm": "number" }
       },
-      "compute.delta": {
-        "title": "Δ CPM vs baseline",
-        "inputs":  { "current": "number", "baseline": "number" },
-        "outputs": { "pctChange": "number", "action": "string" }
+      "compute.deltaCpm": {
+        "title": "Δ CPM %",
+        "inputs":  { "oldCpm": "number", "newCpm": "number" },
+        "outputs": { "deltaPct": "number" }
       },
-      "dv360.patchBid": {
+      "compute.checkInflation": {
+        "title": "Flag inflation",
+        "inputs":  { "deltaPct": "number", "threshold": "number" },
+        "outputs": { "flag": "inflated|ok" }
+      },
+      "dv360.patchDealBid": {
         "title": "Update deal bid",
-        "inputs":  { "dealId": "string", "adjustPct": "number" },
-        "outputs": { "newBid": "number" }
+        "inputs":  { "dealId": "string", "percent": "number" },
+        "outputs": { "oldMicros": "number", "newMicros": "number" }
       }
+    },
+
+    "kpis": ["avg_cpm", "delta_pct"],
+    "critic_hints": {
+      "max_bid_change_pct": 25,
+      "only_when_flag": "inflated"
+    },
+    "observer_hints": {
+      "events": ["step_started","step_finished","tool_called","tool_result","reward"],
+      "sinks": [{ "type": "console" }, { "type": "jsonl" }]
     }
   },
 
   "meta_fatigue_swapper": {
     "tagline": "Rotate creatives when frequency > 6 or audience < 50 k.",
     "workflow_brief": [
-      "meta.pullMetrics → fatigue.check → meta.swapCreative"
+      "meta.pullAdsetMetrics → compute.checkFatigue → meta.swapCreative"
     ],
+
     "required_features": {
       "freq_cap": "6",
       "min_audience": "50 k"
@@ -80,31 +113,42 @@
       "cpa_increase": "≤ 3 %"
     },
     "timeline": { "mvp": "Q4 2025" },
+
     "tools": {
-      "meta.pullMetrics": {
+      "meta.pullAdsetMetrics": {
         "title": "Get Meta ad-set metrics",
-        "inputs":  { "adsetId": "string" },
-        "outputs": { "freq": "number", "audSize": "number" }
+        "inputs":  { "adSetIds": "string[]" },
+        "outputs": { "frequency": "number", "audienceSize": "number" }
       },
-      "fatigue.check": {
+      "compute.checkFatigue": {
         "title": "Flag fatigue",
-        "inputs":  { "freq": "number", "audSize": "number" },
-        "outputs": { "shouldSwap": "boolean" }
+        "inputs":  { "frequency": "number", "audienceSize": "number", "maxFrequency": "number", "minAudience": "number" },
+        "outputs": { "flag": "fatigued|ok" }
       },
       "meta.swapCreative": {
         "title": "Swap in next creative",
-        "inputs":  { "adsetId": "string", "assetId": "string" },
-        "outputs": { "status": "string" }
+        "inputs":  { "adSetId": "string", "creativeId": "string" },
+        "outputs": { "success": "boolean" }
       }
+    },
+
+    "kpis": ["frequency", "audience_size", "ctr"],
+    "critic_hints": {
+      "require_brand_safety": true,
+      "only_when_flag": "fatigued"
+    },
+    "observer_hints": {
+      "events": ["step_started","step_finished","tool_called","tool_result","critic_failure"],
+      "sinks": [{ "type": "console" }, { "type": "jsonl" }]
     }
   },
-
 
   "amc_lookalike_builder": {
     "tagline": "Weekly pipeline that builds SKU-seeded look-alikes in AMC.",
     "workflow_brief": [
-      "amc.queryPurchasers → amc.createLookAlike → amc.exportAudience"
+      "amc.fetchPurchasers → amc.seedFormatter → amc.createLookAlike → amc.exportToAdsConsole → bigquery.lookAlikeBuild"
     ],
+
     "required_features": {
       "sku_seed": "≥ 100 purchasers",
       "la_size": "2× seed"
@@ -114,22 +158,42 @@
       "roas_lift": "≥ 10 %"
     },
     "timeline": { "mvp": "Q1 2026" },
+
     "tools": {
-      "amc.queryPurchasers": {
+      "amc.fetchPurchasers": {
         "title": "Query SKU purchasers",
-        "inputs":  { "sku": "string", "windowDays": "number" },
-        "outputs": { "userIds": "string[]" }
+        "inputs":  { "skus": "string[]", "lookbackDays": "number" },
+        "outputs": { "purchaserIds": "string[]" }
+      },
+      "amc.seedFormatter": {
+        "title": "Normalize purchasers into seed list",
+        "inputs":  { "purchasers": "array", "idField": "enum", "minSeed": "number" },
+        "outputs": { "seedIds": "string[]", "count": "number" }
       },
       "amc.createLookAlike": {
         "title": "Create AMC look-alike",
-        "inputs":  { "seedIds": "string[]", "sizeFactor": "number" },
-        "outputs": { "audienceId": "string" }
+        "inputs":  { "seedIds": "string[]", "audienceName": "string", "sizeMultiplier": "number" },
+        "outputs": { "audienceId": "string", "status": "string" }
       },
-      "amc.exportAudience": {
-        "title": "Export to Ads console",
+      "amc.exportToAdsConsole": {
+        "title": "Deep link to Ads console",
         "inputs":  { "audienceId": "string" },
-        "outputs": { "status": "string" }
+        "outputs": { "exportUrl": "string" }
+      },
+      "bigquery.lookAlikeBuild": {
+        "title": "Log LAL build",
+        "inputs":  { "audienceId": "string", "seedCount": "number", "status": "string" },
+        "outputs": { "insertId": "string" }
       }
+    },
+
+    "kpis": ["seed_count", "lal_status"],
+    "critic_hints": {
+      "min_seed": 100
+    },
+    "observer_hints": {
+      "events": ["plan_started","plan_finished","tool_called","tool_result"],
+      "sinks": [{ "type": "console" }, { "type": "jsonl" }]
     }
   }
 }
