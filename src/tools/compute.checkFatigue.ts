@@ -1,4 +1,4 @@
-import { createTool } from "@mastra/core/tools";
+import { createTool, ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
 
 /**
@@ -6,10 +6,10 @@ import { z } from "zod";
  *   - frequency: current ad-set frequency
  *   - audienceSize: remaining audience size
  *   - maxFrequency (optional): override default max frequency (default 6)
- *   - minAudience (optional): override default min audience size (default 50000)
+ *   - minAudience (optional): override default min audience size (default 50,000)
  *
  * Output:
- *   - flag: "fatigued" if freq>maxFrequency OR audienceSize<minAudience; else "ok"
+ *   - flag: "fatigued" if frequency > maxFrequency OR audienceSize < minAudience; else "ok"
  */
 export const inputSchema = z.object({
   frequency:    z.number().nonnegative(),
@@ -24,22 +24,25 @@ export const outputSchema = z.object({
 });
 export type CheckFatigueOutput = z.infer<typeof outputSchema>;
 
-export const computeCheckFatigue = createTool({
+export const computeCheckFatigue = createTool<typeof inputSchema, typeof outputSchema>({
   id:          "compute.checkFatigue",
   description:
     "Flag ad-set as fatigued when frequency > maxFrequency or audienceSize < minAudience",
-
   inputSchema,
   outputSchema,
 
-  async execute({ context }) {
+  async execute({ context }: ToolExecutionContext<typeof inputSchema>) {
     const { frequency, audienceSize, maxFrequency, minAudience } =
-      inputSchema.parse(context as any);
+      inputSchema.parse(context as unknown);
 
-    const isFatigued =
-      frequency > maxFrequency || audienceSize < minAudience;
+    // Small numeric sanity guard
+    const all = [frequency, audienceSize, maxFrequency, minAudience];
+    if (!all.every(Number.isFinite)) {
+      throw new Error("compute.checkFatigue received non-finite inputs");
+    }
 
-    return { flag: isFatigued ? "fatigued" : "ok" } as CheckFatigueOutput;
+    const isFatigued = frequency > maxFrequency || audienceSize < minAudience;
+    return outputSchema.parse({ flag: isFatigued ? "fatigued" : "ok" });
   },
 });
 

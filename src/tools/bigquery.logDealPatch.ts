@@ -1,6 +1,9 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { BigQuery } from "@google-cloud/bigquery";
+import { withDemo } from "@/utils";
+import fs from "fs/promises";
+import path from "path";
 
 /**
  * Inputs: the DV360 line item ID that was patched, plus old/new CPM values.
@@ -51,48 +54,65 @@ export const bigqueryLogDealPatch = createTool({
   outputSchema,
 
   async execute({ context }) {
-    const { lineItemId, oldMicros, newMicros } = context as LogDealPatchInput;
+    const { lineItemId, oldMicros, newMicros } = inputSchema.parse(context as any);
 
-    // Validate input early
-    if (!lineItemId || typeof oldMicros !== "number" || typeof newMicros !== "number") {
-      throw new Error("Invalid input for bigquery.logDealPatch: expected { lineItemId: string, oldMicros: number, newMicros: number }");
-    }
+    const real = async () => {
+      // Validate required env vars
+      if (!DATASET_ID) {
+        throw new Error("BQ_DATASET_ID is not set. Please set it in the environment (.env) before running this tool.");
+      }
+      if (!TABLE_ID) {
+        throw new Error("BQ_TABLE_ID is not set. Please set it in the environment (.env) before running this tool.");
+      }
 
-    // Validate required env vars
-    if (!DATASET_ID) {
-      throw new Error("BQ_DATASET_ID is not set. Please set it in the environment (.env) before running this tool.");
-    }
-    if (!TABLE_ID) {
-      throw new Error("BQ_TABLE_ID is not set. Please set it in the environment (.env) before running this tool.");
-    }
+      const timestamp = new Date().toISOString();
 
-    const timestamp = new Date().toISOString();
+      // Prepare the row to insert
+      const row = {
+        line_item_id:       lineItemId,
+        timestamp,                    // ISO string
+        old_amount_micros: oldMicros,
+        new_amount_micros: newMicros,
+        delta_micros:      newMicros - oldMicros,
+      };
 
-    // Prepare the row to insert
-    const row = {
-      line_item_id:   lineItemId,
-      timestamp,                    // ISO string
-      old_amount_micros: oldMicros,
-      new_amount_micros: newMicros,
-      delta_micros:      newMicros - oldMicros,
+      try {
+        const client = getBigQuery();
+        await client
+          .dataset(DATASET_ID)
+          .table(TABLE_ID)
+          .insert([row], { ignoreUnknownValues: false });
+
+        return outputSchema.parse({ success: true });
+      } catch (err) {
+        // Surface BigQuery partial failure details if available
+        const e = err as any;
+        const bqErrors = Array.isArray(e?.errors) ? JSON.stringify(e.errors) : "";
+        const message = e?.message || String(e);
+        throw new Error(`Failed to insert deal patch log row into BigQuery dataset=${DATASET_ID} table=${TABLE_ID}. ${message} ${bqErrors}`);
+      }
     };
 
-    // Insert into BigQuery with clear error handling
-    try {
-      const client = getBigQuery();
-      await client
-        .dataset(DATASET_ID)
-        .table(TABLE_ID)
-        .insert([row], { ignoreUnknownValues: false });
+    const fake = async () => {
+      // Append to a local NDJSON file so you can demo OPE/logging without GCP
+      const dir = path.resolve(process.cwd(), ".runs", "demo-logs");
+      await fs.mkdir(dir, { recursive: true });
+      const fp = path.join(dir, "dv360_deal_patches.ndjson");
 
-      return { success: true };
-    } catch (err) {
-      // Surface BigQuery partial failure details if available
-      const e = err as any;
-      const bqErrors = Array.isArray(e?.errors) ? JSON.stringify(e.errors) : "";
-      const message = e?.message || String(e);
-      throw new Error(`Failed to insert deal patch log row into BigQuery dataset=${DATASET_ID} table=${TABLE_ID}. ${message} ${bqErrors}`);
-    }
+      const timestamp = new Date().toISOString();
+      const row = {
+        line_item_id:       lineItemId,
+        timestamp,
+        old_amount_micros: oldMicros,
+        new_amount_micros: newMicros,
+        delta_micros:      newMicros - oldMicros,
+      };
+
+      await fs.appendFile(fp, JSON.stringify(row) + "\n");
+      return outputSchema.parse({ success: true });
+    };
+
+    return withDemo(real, fake);
   },
 });
 

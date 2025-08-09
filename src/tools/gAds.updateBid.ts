@@ -1,11 +1,12 @@
-import { createTool } from "@mastra/core/tools";
+import "server-only";
+import { createTool, ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
 import { GoogleAdsApi } from "google-ads-api";
+import { withDemo } from "@/utils";
 
-/**
- * Strongly type the tool's input/output using Zod and z.infer,
- * and align the execute signature with Mastra's createTool API.
- */
+/*──────────────────────────────────────────────────────────────┐
+  Schemas
+ └──────────────────────────────────────────────────────────────*/
 export const inputSchema = z.object({
   campaignId: z.number(),
   percent: z.number().min(-100).max(100),
@@ -18,13 +19,34 @@ export const outputSchema = z.object({
 });
 export type GAdsUpdateBidOutput = z.infer<typeof outputSchema>;
 
+/*──────────────────────────────────────────────────────────────┐
+  Client bootstrap
+ └──────────────────────────────────────────────────────────────*/
+const GADS_CLIENT_ID     = process.env.GADS_CLIENT_ID ?? "";
+const GADS_CLIENT_SECRET = process.env.GADS_CLIENT_SECRET ?? "";
+const GADS_DEV_TOKEN     = process.env.GADS_DEV_TOKEN ?? "";
+const GADS_CUST_ID       = process.env.GADS_CUST_ID ?? "";
+const GADS_REFRESH       = process.env.GADS_REFRESH ?? "";
+
+function assertEnv() {
+  const miss: string[] = [];
+  if (!GADS_CLIENT_ID)     miss.push("GADS_CLIENT_ID");
+  if (!GADS_CLIENT_SECRET) miss.push("GADS_CLIENT_SECRET");
+  if (!GADS_DEV_TOKEN)     miss.push("GADS_DEV_TOKEN");
+  if (!GADS_CUST_ID)       miss.push("GADS_CUST_ID");
+  if (!GADS_REFRESH)       miss.push("GADS_REFRESH");
+  if (miss.length) {
+    throw new Error(`Missing Google Ads env: ${miss.join(", ")}. Set them or enable DEMO_MODE.`);
+  }
+}
+
 const gads = new GoogleAdsApi({
-  client_id: process.env.GADS_CLIENT_ID!,
-  client_secret: process.env.GADS_CLIENT_SECRET!,
-  developer_token: process.env.GADS_DEV_TOKEN!,
+  client_id:     GADS_CLIENT_ID,
+  client_secret: GADS_CLIENT_SECRET,
+  developer_token: GADS_DEV_TOKEN,
 });
 
-// Minimal type for GAQL query row to satisfy strict TS
+// Minimal GAQL row shape
 type BudgetRow = {
   campaign_budget?: {
     resource_name?: string;
@@ -32,60 +54,71 @@ type BudgetRow = {
   };
 };
 
-export const gAdsUpdateBid = createTool({
+export const gAdsUpdateBid = createTool<typeof inputSchema, typeof outputSchema>({
   id: "gAds.updateBid",
-  description: "Apply a %-based bid adjustment to a Google-Ads campaign.",
-
+  description: "Apply a %-based bid/budget adjustment to a Google Ads campaign.",
   inputSchema,
   outputSchema,
 
-  // Mastra execute signature receives a single object with named params.
-  async execute({ context }: { context: GAdsUpdateBidInput }) {
-    const { campaignId, percent } = context;
+  async execute({ context }: ToolExecutionContext<typeof inputSchema>) {
+    const { campaignId, percent } = inputSchema.parse(context as unknown);
 
-    const customer = gads.Customer({
-      customer_id: process.env.GADS_CUST_ID!,
-      refresh_token: process.env.GADS_REFRESH!,
-    });
+    const real = async (): Promise<GAdsUpdateBidOutput> => {
+      assertEnv();
 
-    // 1) Query (stream) – fully typed per google-ads-api v14
-    const stream = customer.queryStream<BudgetRow>(`
-      SELECT campaign_budget.resource_name,
-             campaign_budget.amount_micros
-      FROM   campaign
-      WHERE  campaign.id = ${campaignId}
-      LIMIT  1
-    `);
+      const customer = gads.Customer({
+        customer_id:  GADS_CUST_ID,
+        refresh_token: GADS_REFRESH,
+      });
 
-    let row: BudgetRow | undefined;
-    for await (const r of stream) { row = r; break; }
+      // 1) Query the campaign budget (single row)
+      const stream = customer.queryStream<BudgetRow>(`
+        SELECT campaign_budget.resource_name,
+               campaign_budget.amount_micros
+        FROM   campaign
+        WHERE  campaign.id = ${campaignId}
+        LIMIT  1
+      `);
 
-    if (!row?.campaign_budget?.resource_name || row.campaign_budget.amount_micros == null) {
-      throw new Error(`Campaign ${campaignId} not found or has no budget`);
-    }
+      let row: BudgetRow | undefined;
+      for await (const r of stream) { row = r; break; }
 
-    const budgetResName = row.campaign_budget.resource_name!;
-    const oldMicros = Number(row.campaign_budget.amount_micros);
-    const newMicros = Math.round(oldMicros * (1 + percent / 100));
+      if (!row?.campaign_budget?.resource_name || row.campaign_budget.amount_micros == null) {
+        throw new Error(`Campaign ${campaignId} not found or has no budget.`);
+      }
 
-    // 2) Patch via mutateCampaignBudgets (gRPC) with explicit updateMask
-    // Correct v14 pattern: get the service from the authenticated Customer instance.
-    const budgetSvc = (customer as any).getService("CampaignBudgetServiceClient");
+      const budgetResName = String(row.campaign_budget.resource_name);
+      const oldMicros     = Number(row.campaign_budget.amount_micros);
+      const newMicros     = Math.round(oldMicros * (1 + percent / 100));
 
-    await budgetSvc.mutateCampaignBudgets({
-      customerId: process.env.GADS_CUST_ID!,
-      operations: [
-        {
-          update: {
-            resourceName: budgetResName,
-            amountMicros: BigInt(newMicros),
-          } as any,
-          updateMask: { paths: ["amount_micros"] },
-        },
-      ],
-    });
+      // 2) Mutate – update mask must target amount_micros
+      // Using raw service to avoid dependency on versioned helpers
+      const svc: any = (customer as any).getService("CampaignBudgetServiceClient");
+      await svc.mutateCampaignBudgets({
+        customerId: GADS_CUST_ID,
+        operations: [
+          {
+            update: {
+              resourceName: budgetResName,
+              // google-ads expects int64 as string or BigInt; this client accepts BigInt
+              amountMicros: BigInt(newMicros),
+            },
+            updateMask: { paths: ["amount_micros"] },
+          },
+        ],
+      });
 
-    return { oldMicros, newMicros };
+      return outputSchema.parse({ oldMicros, newMicros });
+    };
+
+    const fake = async (): Promise<GAdsUpdateBidOutput> => {
+      // Choose a consistent fake baseline and apply percent
+      const oldMicros = 2_000_000; // $2.00
+      const newMicros = Math.round(oldMicros * (1 + percent / 100));
+      return outputSchema.parse({ oldMicros, newMicros });
+    };
+
+    return withDemo(real, fake);
   },
 });
 

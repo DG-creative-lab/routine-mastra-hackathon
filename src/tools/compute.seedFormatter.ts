@@ -1,6 +1,6 @@
-import { createTool } from "@mastra/core/tools";
+import { createTool, ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
-import crypto from "crypto";
+import crypto from "node:crypto";
 
 /**
  * compute.seedFormatter
@@ -14,7 +14,7 @@ import crypto from "crypto";
 // Input rows you’ll pass from amc.fetchPurchasers (or your own source)
 const PurchaserRow = z.object({
   email:       z.string().email().optional(),
-  hashedEmail: z.string().regex(/^[a-f0-9]{64}$/).optional(), // pre-hashed OK
+  hashedEmail: z.string().regex(/^[a-f0-9]{64}$/).optional(), // pre-hashed OK (lowercase hex)
   deviceId:    z.string().optional(), // IDFA/AAID/etc. (we’ll normalize)
   userId:      z.string().optional(), // your internal CRM id
   sku:         z.string().optional(),
@@ -53,6 +53,7 @@ export const outputSchema = z.object({
     belowMinSeed: z.boolean(),
     droppedForMissingId: z.number(),
     tookTopN: z.number().nullable(),
+    hashedCount: z.number(), // how many emails we hashed in this run
   }),
   preview: z.array(z.string()).max(10),
 });
@@ -64,7 +65,7 @@ const sha256Hex = (s: string) =>
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
-/** Normalize IDFA/AAID-ish device IDs: remove dashes/whitespace, lowercase */
+/** Normalize IDFA/AAID-ish device IDs: remove non-hex, lowercase */
 const normalizeDeviceId = (id: string) =>
   id.replace(/[^A-Fa-f0-9]/g, "").toLowerCase();
 
@@ -78,12 +79,16 @@ function metricOf(row: z.infer<typeof PurchaserRow>, key?: "revenue" | "quantity
 function extractSeed(
   row: z.infer<typeof PurchaserRow>,
   idField: AmcSeedFormatterInput["idField"],
-  hashEmails: boolean
+  hashEmails: boolean,
+  counters: { hashedCount: number }
 ): string | null {
   switch (idField) {
     case "hashedEmail": {
       if (row.hashedEmail) return row.hashedEmail.toLowerCase();
-      if (row.email && hashEmails) return sha256Hex(normalizeEmail(row.email));
+      if (row.email && hashEmails) {
+        counters.hashedCount += 1;
+        return sha256Hex(normalizeEmail(row.email));
+      }
       return null;
     }
     case "email": {
@@ -103,14 +108,14 @@ function extractSeed(
   }
 }
 
-export const amcSeedFormatter = createTool({
+export const amcSeedFormatter = createTool<typeof inputSchema, typeof outputSchema>({
   id: "amc.seedFormatter",
   description:
     "Normalize purchaser rows into a deduped seed list for AMC look-alike creation (hashed email/device/userId).",
   inputSchema,
   outputSchema,
 
-  async execute({ context }) {
+  async execute({ context }: ToolExecutionContext<typeof inputSchema>) {
     const {
       purchasers,
       idField,
@@ -119,11 +124,14 @@ export const amcSeedFormatter = createTool({
       minSeed,
       takeTopBy,
       topN,
-    } = inputSchema.parse(context as any);
+    } = inputSchema.parse(context as unknown);
 
-    let rows = purchasers.slice();
+    if (!Array.isArray(purchasers) || purchasers.length === 0) {
+      throw new Error("amc.seedFormatter: purchasers[] is empty");
+    }
 
     // Optional: rank by metric and keep topN
+    let rows = purchasers.slice();
     let tookTopN: number | null = null;
     if (takeTopBy && topN) {
       rows = rows
@@ -133,34 +141,45 @@ export const amcSeedFormatter = createTool({
       tookTopN = Math.min(topN, purchasers.length);
     }
 
-    const seedIdsRaw: string[] = [];
-    let droppedForMissingId = 0;
+    const counters = { hashedCount: 0, droppedForMissingId: 0 };
+
+    const seen = new Set<string>();
+    const seedIdsOrdered: string[] = [];
 
     for (const row of rows) {
-      const seed = extractSeed(row, idField, hashEmails);
-      if (seed) {
-        seedIdsRaw.push(seed);
+      const seed = extractSeed(row, idField, hashEmails, counters);
+      if (!seed) {
+        counters.droppedForMissingId++;
+        continue;
+      }
+      if (dedupe) {
+        if (!seen.has(seed)) {
+          seen.add(seed);
+          seedIdsOrdered.push(seed);
+        }
       } else {
-        droppedForMissingId++;
+        seedIdsOrdered.push(seed);
       }
     }
 
-    const seedIds = dedupe ? Array.from(new Set(seedIdsRaw)) : seedIdsRaw;
-    const belowMinSeed = seedIds.length < minSeed;
+    const belowMinSeed = seedIdsOrdered.length < minSeed;
+    const deduped =
+      dedupe ? (rows.length - seedIdsOrdered.length) : 0;
 
-    return {
-      seedIds,
-      count: seedIds.length,
+    return outputSchema.parse({
+      seedIds: seedIdsOrdered,
+      count: seedIdsOrdered.length,
       stats: {
         totalRows: purchasers.length,
-        deduped: dedupe ? seedIdsRaw.length - seedIds.length : 0,
+        deduped,
         fieldUsed: idField,
         belowMinSeed,
-        droppedForMissingId,
+        droppedForMissingId: counters.droppedForMissingId,
         tookTopN,
+        hashedCount: counters.hashedCount,
       },
-      preview: seedIds.slice(0, 10),
-    };
+      preview: seedIdsOrdered.slice(0, 10),
+    });
   },
 });
 

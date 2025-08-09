@@ -1,91 +1,114 @@
-
+// src/tools/amc.createLookAlike.ts
 import { createTool, ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
+import { withDemo, rand } from "@/utils";
 
 /**
  * amc.createLookAlike
  * ------------------------------------------------------------
  * Creates a look-alike audience from a seed list.
- * - Works against a generic AMC Audience API endpoint if configured
- * - Falls back to DRY RUN when creds/URL are missing
+ * - REAL mode: calls AMC Audience API (URL + token required)
+ * - DEMO mode: returns a plausible synthetic audienceId/status
  *
  * Env (see .env.example):
  *   AMC_AUDIENCE_API_URL=   # e.g. https://amc-api.yourorg.com/v1/audiences/lookalike
- *   AMC_API_TOKEN=          # Bearer token for your AMC audience service
- *   AMAZON_ADVERTISER_ID=   # Optional: used in payload if your API expects it
+ *   AMC_API_HOST=           # optional; used if AMC_AUDIENCE_API_URL is not set, defaults to https://api.amc.amazon.com
+ *   AMC_API_TOKEN=          # Bearer token for your AMC audience service (REAL mode)
+ *   AMAZON_ADVERTISER_ID=   # Optional: included in payload if present
  */
 
-
-/**
- * Inputs for creating a look-alike audience in Amazon Marketing Cloud.
- */
+// ---------- Schemas ----------
 export const inputSchema = z.object({
-  seedIds:       z.array(z.string()).nonempty().describe("List of seed audience IDs"),
-  audienceName:  z.string().min(1).describe("Name for the new look-alike audience"),
+  seedIds: z.array(z.string()).nonempty().describe("List of seed audience IDs"),
+  audienceName: z.string().min(1).describe("Name for the new look-alike audience"),
   sizeMultiplier: z.number().min(1).describe("Multiplier for the look-alike size (e.g. 2 for 2×)"),
 });
 export type AmcCreateLookAlikeInput = z.infer<typeof inputSchema>;
 
-/**
- * Outputs returned after creating the look-alike audience.
- */
 export const outputSchema = z.object({
   audienceId: z.string().describe("The ID of the newly created look-alike audience"),
-  status:     z.enum(["CREATING", "READY", "FAILED"]).describe("Current status of the audience job"),
+  status: z.enum(["CREATING", "READY", "FAILED"]).describe("Current status of the audience job"),
 });
 export type AmcCreateLookAlikeOutput = z.infer<typeof outputSchema>;
 
-/**
- * amc.createLookAlike
- *
- * Calls AMC's audience-creation endpoint to build a look-alike audience
- * from the given seed IDs, named and sized as requested.
- */
+// ---------- Tool ----------
 export const amcCreateLookAlike = createTool({
-  id:          "amc.createLookAlike",
+  id: "amc.createLookAlike",
   description: "Create a look-alike audience from seed purchasers in AMC.",
   inputSchema,
   outputSchema,
 
   async execute(ctx: ToolExecutionContext<typeof inputSchema>) {
-    const { seedIds, audienceName, sizeMultiplier } = ctx.context;
+    const { seedIds, audienceName, sizeMultiplier } = inputSchema.parse(ctx.context as unknown);
 
-    const token = process.env.AMC_API_TOKEN;
-    const host  = process.env.AMC_API_HOST ?? "https://api.amc.amazon.com";
-    if (!token) {
-      throw new Error("AMC_API_TOKEN is missing. Please set it in your .env");
-    }
+    const real = async () => {
+      const token = process.env.AMC_API_TOKEN;
+      if (!token) {
+        throw new Error(
+          "AMC_API_TOKEN is missing. Set it in your environment or run with DEMO_MODE=true."
+        );
+      }
 
-    // Construct request payload
-    const payload = {
-      name: audienceName,
-      seeds: seedIds,
-      lookalikeSizeMultiplier: sizeMultiplier,
+      // Prefer a full endpoint if provided; otherwise build from host + canonical path
+      const host = (process.env.AMC_API_HOST ?? "https://api.amc.amazon.com").replace(/\/$/, "");
+      const url =
+        process.env.AMC_AUDIENCE_API_URL ??
+        `${host}/v2/audiences/lookalikes`;
+
+      const payload: Record<string, unknown> = {
+        name: audienceName,
+        seeds: seedIds,
+        lookalikeSizeMultiplier: sizeMultiplier,
+      };
+      if (process.env.AMAZON_ADVERTISER_ID) {
+        payload.advertiserId = String(process.env.AMAZON_ADVERTISER_ID);
+      }
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`AMC createLookAlike failed: ${res.status} ${text}`);
+      }
+
+      const raw = (await res.json()) as Record<string, any>;
+      // Normalize status → one of our enum values
+      const rawStatus = String(raw.status ?? "READY").toUpperCase();
+      const status: "CREATING" | "READY" | "FAILED" =
+        rawStatus.includes("FAIL")
+          ? "FAILED"
+          : rawStatus.includes("READY")
+          ? "READY"
+          : "CREATING";
+
+      return outputSchema.parse({
+        audienceId: String(raw.audienceId ?? raw.id ?? `aud-${Date.now()}`),
+        status,
+      });
     };
-    // Fire the HTTP request
-    const res = await fetch(`${host}/v2/audiences/lookalikes`, {
-    method:  "POST",
-    headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type":  "application/json",
-    },
-    body: JSON.stringify(payload),
-    });
 
-    if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    throw new Error(`AMC createLookAlike failed (${res.status}): ${errText}`);
-    }
+    const fake = async () => {
+      // deterministic-ish synthetic id & status
+      const suffix = Math.floor(rand() * 1_000_000)
+        .toString()
+        .padStart(6, "0");
+      const audienceId = `aud-${suffix}`;
 
-    // 1) Read the raw JSON (as any)
-    // 2) Parse + validate via our Zod schema
-    const raw = (await res.json()) as Record<string, any>;
-    const result = outputSchema.parse({
-    audienceId: raw.audienceId,
-    status:     raw.status,
-    });
+      // ~80% READY, ~20% CREATING for variety
+      const status: "CREATING" | "READY" | "FAILED" =
+        rand() < 0.8 ? "READY" : "CREATING";
 
-    return result;
+      return outputSchema.parse({ audienceId, status });
+    };
+
+    return withDemo(real, fake);
   },
 });
 

@@ -5,9 +5,9 @@ This doc outlines how our hackathon project grows into a serious, collaborative,
 ---
 
 ### Why this matters (in one minute)
-	•	Today: We already take structured product/marketing specs → plan with a large LLM (Routine-style JSON steps) → scaffold a runnable Mastra template + tools.
-	•	Tomorrow: Give each sub-agent a mailbox and a small protocol for collaboration; add a blackboard (shared state), lightweight router, and critics as first-class participants.
-	•	Result: Agents plan, execute, and negotiate. Observability is built-in. Guardrails bound spend and risk. Over time we can learn better policies (bandits, offline RL, MARL) from our run logs—safely.
+* Today: We already take structured product/marketing specs → plan with a large LLM (Routine-style JSON steps) → scaffold a runnable Mastra template + tools.
+* Tomorrow: Give each sub-agent a mailbox and a small protocol for collaboration; add a blackboard (shared state), lightweight router, and critics as first-class participants.
+* Result: Agents plan, execute, and negotiate. Observability is built-in. Guardrails bound spend and risk. Over time we can learn better policies (bandits, offline RL, MARL) from our run logs—safely.
 
 ----
 
@@ -44,10 +44,10 @@ flowchart LR
 
 #### Where we are now
 
-	•	Parser: Validates/normalizes spec JSON with Zod.
-	•	Meta-Planner: makeAgentSpecs() returns agent_specs (planner/executor/critic/observer) and we flatten planner steps into plan.json via flattenToRoutinePlan().
-	•	Template Builder: Emits plan.json, agents.json, workflow.ts, nodes.ts, critics stub, README.
-	•	UI: Upload spec & env vars → /api/generate → browse files → download ZIP.
+* Parser: Validates/normalizes spec JSON with Zod.
+* Meta-Planner: makeAgentSpecs() returns agent_specs (planner/executor/critic/observer) and we flatten planner steps into plan.json via flattenToRoutinePlan().
+* Template Builder: Emits plan.json, agents.json, workflow.ts, nodes.ts, critics stub, README.
+* UI: Upload spec & env vars → /api/generate → browse files → download ZIP.
 
 ----
 

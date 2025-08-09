@@ -1,15 +1,15 @@
-import { createTool } from "@mastra/core/tools";
+import "server-only";
+import { createTool, ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
+import { withDemo } from "@/utils";
 
 /**
- * Input:
- *   - adSetId: the ID of the Meta Ad Set to update
- *   - creativeId: the ID of the new Creative to assign
- *
- * Output:
- *   - success: whether the swap succeeded
+ * Env:
+ *   META_ACCESS_TOKEN=  // Marketing API token with ads_management
  */
+
 export const inputSchema = z.object({
+  /** NOTE: treated as an Ad ID for the Graph API call. */
   adSetId:    z.string().nonempty(),
   creativeId: z.string().nonempty(),
 });
@@ -20,50 +20,56 @@ export const outputSchema = z.object({
 });
 export type MetaSwapCreativeOutput = z.infer<typeof outputSchema>;
 
-/**
- * meta.swapCreative
- * ————————————————————————————————————————————————————————————
- * Swaps in a new creative asset into an Ad Set via Meta Graph API.
- */
-export const metaSwapCreative = createTool({
-  id:          "meta.swapCreative",
-  description: "Rotate in a new creative for the given Ad Set via Meta Marketing API.",
-
+export const metaSwapCreative = createTool<typeof inputSchema, typeof outputSchema>({
+  id: "meta.swapCreative",
+  description: "Rotate in a new creative for the given Ad (plan calls it AdSet) via Meta Marketing API.",
   inputSchema,
   outputSchema,
 
-  async execute({ context }) {
-    const { adSetId, creativeId } = inputSchema.parse(context as any);
-    const token = process.env.META_ACCESS_TOKEN;
-    if (!token) {
-      throw new Error(
-        "META_ACCESS_TOKEN is not set. Please provide a valid Meta access token."
-      );
-    }
+  async execute({ context }: ToolExecutionContext<typeof inputSchema>) {
+    const { adSetId, creativeId } = inputSchema.parse(context as unknown);
 
-    // Meta Graph API endpoint for updating an Ad's creative field:
-    // Note: In the Marketing API, you typically update the Ad (not AdSet) itself.
-    // Here we assume adSetId is actually the Ad's ID. Adjust if needed.
-    const url = `https://graph.facebook.com/v19.0/${encodeURIComponent(adSetId)}`;
-    const params = new URLSearchParams({
-      creative: JSON.stringify({ creative_id: creativeId }),
-      access_token: token,
-    });
+    const real = async (): Promise<MetaSwapCreativeOutput> => {
+      const token = process.env.META_ACCESS_TOKEN;
+      if (!token) {
+        throw new Error("META_ACCESS_TOKEN is not set. Provide a valid token or enable DEMO_MODE.");
+      }
 
-    const res = await fetch(`${url}?${params}`, {
-      method: "POST",
-      headers: { "Accept": "application/json" },
-    });
+      // Treat adSetId as Ad ID here:
+      const adId = adSetId;
+      const url = `https://graph.facebook.com/v19.0/${encodeURIComponent(adId)}`;
+      const params = new URLSearchParams({
+        creative: JSON.stringify({ creative_id: creativeId }),
+        access_token: token,
+      });
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`Meta swapCreative failed (${res.status}): ${text}`);
-    }
+      const res = await fetch(`${url}?${params}`, {
+        method: "POST",
+        headers: { Accept: "application/json" },
+      });
 
-    // Graph API returns { success: true } on success
-    const json = (await res.json()) as any;
-    return { success: !!json.success } as MetaSwapCreativeOutput;
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`Meta swapCreative failed (${res.status}): ${text}`);
+      }
+
+      const json = (await res.json()) as any; // { success: true } on success
+      return outputSchema.parse({ success: !!json?.success });
+    };
+
+    const fake = async (): Promise<MetaSwapCreativeOutput> => {
+      // Pretend success; handy for UI demos and plan testing.
+      return { success: true };
+    };
+
+    return withDemo(real, fake);
   },
 });
 
 export default metaSwapCreative;
+
+/**
+Note: In the Meta Marketing API you typically update the Ad’s creative (not the AdSet). 
+We keep the field name adSetId for back-compat with your plan, but treat it as the Ad ID. 
+If you truly have an AdSet ID, you’d first need to select a specific Ad under that AdSet to update.
+ */

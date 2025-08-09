@@ -1,5 +1,7 @@
-import { createTool } from "@mastra/core/tools";
+// src/tools/amc.exportToAdsConsole.ts
+import { createTool, ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
+import { withDemo } from "@/utils";
 
 /**
  * Input: the AMC audience ID you just created
@@ -15,9 +17,14 @@ export const outputSchema = z.object({
 });
 export type AmcExportToAdsConsoleOutput = z.infer<typeof outputSchema>;
 
-const ADS_CONSOLE_BASE =
-  process.env.AMAZON_ADS_CONSOLE_BASE_URL ??
-  "https://advertising.amazon.com/campaigns/audiences";
+/** Base Console URL – can be overridden via env */
+function consoleBase(): string {
+  const raw =
+    process.env.AMAZON_ADS_CONSOLE_BASE_URL ??
+    "https://advertising.amazon.com/campaigns/audiences";
+  // strip trailing slash to avoid double slashes
+  return raw.replace(/\/+$/, "");
+}
 
 export const amcExportToAdsConsole = createTool({
   id: "amc.exportToAdsConsole",
@@ -26,16 +33,24 @@ export const amcExportToAdsConsole = createTool({
   inputSchema,
   outputSchema,
 
-  async execute({ context }) {
-    const { audienceId } = context as AmcExportToAdsConsoleInput;
+  async execute(ctx: ToolExecutionContext<typeof inputSchema>) {
+    const { audienceId } = inputSchema.parse(ctx.context as unknown);
 
-    // In a real integration you'd call Amazon Ads APIs here.
-    // For now we simply build the console URL with the audienceId.
-    const exportUrl = `${ADS_CONSOLE_BASE}?audienceId=${encodeURIComponent(
-      audienceId
-    )}`;
+    const run = async () => {
+      const base = consoleBase();
+      const advertiserId = process.env.AMAZON_ADVERTISER_ID
+        ? String(process.env.AMAZON_ADVERTISER_ID)
+        : undefined;
 
-    return outputSchema.parse({ exportUrl });
+      const url = new URL(base);
+      url.searchParams.set("audienceId", audienceId);
+      if (advertiserId) url.searchParams.set("advertiserId", advertiserId);
+
+      return outputSchema.parse({ exportUrl: url.toString() });
+    };
+
+    // Same in real & demo; we still go through withDemo to keep latency/consistency
+    return withDemo(run, run);
   },
 });
 

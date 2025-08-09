@@ -15,17 +15,22 @@ const OutSchema = z.object({
 /*------------------------------------------------------------
   Tool definition
 ------------------------------------------------------------*/
-export const computeCheck = createTool<
-  typeof InSchema,
-  typeof OutSchema
->({
+export const computeCheck = createTool<typeof InSchema, typeof OutSchema>({
   id:          "compute.check",
-  description: "Return 'low' when ROAS < threshold",
+  description: "Return 'low' when ROAS < threshold; otherwise 'ok'.",
   inputSchema:  InSchema,
   outputSchema: OutSchema,
 
   async execute({ context }: ToolExecutionContext<typeof InSchema>) {
-    const { roas, threshold } = context;
-    return { flag: roas < threshold ? "low" : "ok" };
+    const { roas, threshold } = InSchema.parse(context as unknown);
+
+    // A tiny sanity guard to avoid NaN propagation in weird pipelines
+    if (!Number.isFinite(roas) || !Number.isFinite(threshold)) {
+      throw new Error("compute.check received non-finite inputs");
+    }
+
+    return OutSchema.parse({ flag: roas < threshold ? "low" : "ok" });
   },
 });
+
+export default computeCheck;
