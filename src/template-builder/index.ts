@@ -10,7 +10,10 @@ import {
   file_registerTs,
   file_readmeMd,
 } from "./scaffolders";
-import type { BuildOptions, RoutinePlan, ToolBinding, CriticRule, ObserverSpec } from "./types";
+import type { CriticRule } from "../types/agents";
+import type { BuildOptions,  ToolBinding } from "./types";
+import type { RoutinePlan } from "@/types/canonical";
+import type { ObserverSpec } from "@/types/agents";
 
 /** Pull critic rules & observer spec out of PlannerOutput (loose shape on purpose) */
 function extractCriticsAndObserver(agentSpecs?: any): { critics: CriticRule[]; observer?: ObserverSpec } {

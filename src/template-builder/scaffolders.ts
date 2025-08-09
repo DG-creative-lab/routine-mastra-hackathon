@@ -1,4 +1,7 @@
-import type { RoutinePlan, ToolBinding, CriticRule, ObserverSpec } from "./types";
+import type { CriticRule } from "../types/agents";
+import type { ToolBinding } from "./types";
+import type { RoutinePlan } from "@/types/canonical";
+import type { ObserverSpec } from "@/types/agents";
 
 export function file_planJson(planRaw: string) {
   return planRaw;

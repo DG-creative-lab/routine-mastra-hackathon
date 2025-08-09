@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { SYSTEM_PROMPT, buildUserPrompt } from "./prompt";
-import { CanonicalSpec, RoutineStep } from "../types/cannonical";
+import { CanonicalSpec, RoutineStep } from "../types/canonical";
 
 // ---------- NEW TYPES ----------
 export type AgentRole = "planner" | "executor" | "critic" | "observer";

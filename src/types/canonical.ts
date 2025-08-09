@@ -1,13 +1,11 @@
-// src/types/cannonical.ts
-
-// Hints about a tool (purely for planning; keep loose on purpose)
+/** Tool hints used only at planning time (loose on purpose). */
 export interface ToolHint {
   title?: string;
   inputs?: Record<string, string>;   // e.g. { campaignId: "number" }
   outputs?: Record<string, string>;  // e.g. { roas: "number" }
 }
 
-// Planner-consumable critic hints (extend as needed)
+/** Planner-consumable critic hints (you can extend freely). */
 export type CriticHints = {
   max_bid_change_pct?: number;
   only_when_flag?: string;           // e.g. "low", "inflated", "fatigued"
@@ -17,7 +15,7 @@ export type CriticHints = {
   [key: string]: unknown;
 };
 
-// Planner-consumable observer hints (what to emit in observer agent)
+/** Planner-consumable observer hints. */
 export type ObserverHints = {
   events?: string[];                 // e.g. ["plan_started","tool_result"]
   sinks?: Array<
@@ -35,16 +33,15 @@ export interface CanonicalSpec {
   success_metrics: Record<string, unknown>;
   timeline: Record<string, unknown>;
 
-  // ── NEW (all optional; safe for older specs) ─────────────────
+  // Optional, safe for older specs
   workflow_brief?: string[];                 // e.g. ["ga4.pull → compute.check → gAds.updateBid(-20%)"]
-  tools?: Record<string, ToolHint>;          // tool ID → hints (title, IO shapes)
+  tools?: Record<string, ToolHint>;          // tool ID → hints
   kpis?: string[];                           // e.g. ["roas","bid_delta_pct"]
-  critic_hints?: CriticHints;                // guard-rail hints
-  observer_hints?: ObserverHints;            // logging/telemetry hints
+  critic_hints?: CriticHints;
+  observer_hints?: ObserverHints;
 }
 
-// NOTE: LLM-generated steps typically arrive without IDs;
-// we assign them during flattening. Make id optional.
+/** Routine execution step (LLM may omit id; we assign during flattening). */
 export interface RoutineStep {
   id?: number;
   tool: string;
@@ -52,7 +49,9 @@ export interface RoutineStep {
   outputs?: string[];
   condition?: string;
   description?: string; // optional, handy for docs
+  // optional tag added by meta-planner flattener
+  agent?: string;
 }
 
-// (optional helpers if you like)
+export type RoutinePlan = RoutineStep[];
 export type CanonicalSpecMap = Record<string, Omit<CanonicalSpec, "id">>;

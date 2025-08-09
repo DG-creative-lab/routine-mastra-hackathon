@@ -1,7 +1,6 @@
-// src/meta-planner/index.ts
 import OpenAI from "openai";
 import { SYSTEM_PROMPT, buildUserPrompt } from "./prompt";
-import { RoutineStep, CanonicalSpec } from "../types/cannonical";
+import { RoutineStep, CanonicalSpec } from "../types/canonical";
 
 /** Roles across channels */
 export type AgentRole = "planner" | "executor" | "critic" | "observer";

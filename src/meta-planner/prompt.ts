@@ -1,5 +1,4 @@
-// src/meta-planner/prompt.ts
-import { CanonicalSpec } from "../types/cannonical";
+import { CanonicalSpec } from "../types/canonical";
 
 export const SYSTEM_PROMPT = `
 You are *ArchitectGPT* — design Routine-style multi-agent systems for marketing,
