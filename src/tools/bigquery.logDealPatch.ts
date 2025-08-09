@@ -1,13 +1,11 @@
-import { createTool } from "@mastra/core/tools";
+import { createTool, ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
 import { BigQuery } from "@google-cloud/bigquery";
 import { withDemo } from "@/utils";
 import fs from "fs/promises";
 import path from "path";
 
-/**
- * Inputs: the DV360 line item ID that was patched, plus old/new CPM values.
- */
+/** Inputs: DV360 line item + old/new CPM micros */
 export const inputSchema = z.object({
   lineItemId: z.string(),
   oldMicros:  z.number(),
@@ -15,100 +13,67 @@ export const inputSchema = z.object({
 });
 export type LogDealPatchInput = z.infer<typeof inputSchema>;
 
-export const outputSchema = z.object({
-  success: z.boolean(),
-});
+export const outputSchema = z.object({ success: z.boolean() });
 export type LogDealPatchOutput = z.infer<typeof outputSchema>;
 
-/**
- * Lazily create a BigQuery client so env is already loaded when used.
- * Throws a clear error if GOOGLE_APPLICATION_CREDENTIALS is not configured.
- */
 let bq: BigQuery | null = null;
 function getBigQuery(): BigQuery {
   if (!bq) {
-    // Google client libraries support ADC; allow either ADC or explicit path.
-    // Surface a clear message if neither service account nor workload identity is configured.
-    const credHint =
-      "Ensure Application Default Credentials are available (e.g. set GOOGLE_APPLICATION_CREDENTIALS to a service account key, or run `gcloud auth application-default login`, or use Workload Identity on GCP).";
-    try {
-      bq = new BigQuery();
-    } catch (err) {
-      throw new Error(`Failed to initialize BigQuery client. ${credHint} Original error: ${(err as Error).message}`);
+    try { bq = new BigQuery(); }
+    catch (err) {
+      const msg =
+        "Ensure ADC is configured (GOOGLE_APPLICATION_CREDENTIALS, `gcloud auth application-default login`, or Workload Identity).";
+      throw new Error(`Failed to initialize BigQuery client. ${msg} ${(err as Error).message}`);
     }
   }
   return bq;
 }
 
-/**
- * Table where we log each patch:
- * e.g. dataset `dv360_logs`, table `deal_patch_history`
- */
 const DATASET_ID = process.env.BQ_DATASET_ID;
 const TABLE_ID   = process.env.BQ_TABLE_ID;
 
-export const bigqueryLogDealPatch = createTool({
-  id:          "bigquery.logDealPatch",
+export const bigqueryLogDealPatch = createTool<typeof inputSchema, typeof outputSchema>({
+  id: "bigquery.logDealPatch",
   description: "Append a row to BigQuery with DV360 patch details for OPE analysis.",
   inputSchema,
   outputSchema,
 
-  async execute({ context }) {
-    const { lineItemId, oldMicros, newMicros } = inputSchema.parse(context as any);
+  async execute({ context }: ToolExecutionContext<typeof inputSchema>) {
+    const { lineItemId, oldMicros, newMicros } = inputSchema.parse(context as unknown);
 
-    const real = async () => {
-      // Validate required env vars
-      if (!DATASET_ID) {
-        throw new Error("BQ_DATASET_ID is not set. Please set it in the environment (.env) before running this tool.");
-      }
-      if (!TABLE_ID) {
-        throw new Error("BQ_TABLE_ID is not set. Please set it in the environment (.env) before running this tool.");
-      }
+    const real = async (): Promise<LogDealPatchOutput> => {
+      if (!DATASET_ID) throw new Error("BQ_DATASET_ID is not set.");
+      if (!TABLE_ID)   throw new Error("BQ_TABLE_ID is not set.");
 
-      const timestamp = new Date().toISOString();
-
-      // Prepare the row to insert
       const row = {
         line_item_id:       lineItemId,
-        timestamp,                    // ISO string
-        old_amount_micros: oldMicros,
-        new_amount_micros: newMicros,
-        delta_micros:      newMicros - oldMicros,
+        timestamp:          new Date().toISOString(),
+        old_amount_micros:  oldMicros,
+        new_amount_micros:  newMicros,
+        delta_micros:       newMicros - oldMicros,
       };
 
       try {
-        const client = getBigQuery();
-        await client
-          .dataset(DATASET_ID)
-          .table(TABLE_ID)
+        await getBigQuery().dataset(DATASET_ID).table(TABLE_ID)
           .insert([row], { ignoreUnknownValues: false });
-
         return outputSchema.parse({ success: true });
-      } catch (err) {
-        // Surface BigQuery partial failure details if available
-        const e = err as any;
-        const bqErrors = Array.isArray(e?.errors) ? JSON.stringify(e.errors) : "";
-        const message = e?.message || String(e);
-        throw new Error(`Failed to insert deal patch log row into BigQuery dataset=${DATASET_ID} table=${TABLE_ID}. ${message} ${bqErrors}`);
+      } catch (err: any) {
+        const details = Array.isArray(err?.errors) ? JSON.stringify(err.errors) : "";
+        throw new Error(`BigQuery insert failed (${DATASET_ID}.${TABLE_ID}). ${err?.message ?? err} ${details}`);
       }
     };
 
-    const fake = async () => {
-      // Append to a local NDJSON file so you can demo OPE/logging without GCP
+    const fake = async (): Promise<LogDealPatchOutput> => {
       const dir = path.resolve(process.cwd(), ".runs", "demo-logs");
       await fs.mkdir(dir, { recursive: true });
-      const fp = path.join(dir, "dv360_deal_patches.ndjson");
-
-      const timestamp = new Date().toISOString();
       const row = {
         line_item_id:       lineItemId,
-        timestamp,
-        old_amount_micros: oldMicros,
-        new_amount_micros: newMicros,
-        delta_micros:      newMicros - oldMicros,
+        timestamp:          new Date().toISOString(),
+        old_amount_micros:  oldMicros,
+        new_amount_micros:  newMicros,
+        delta_micros:       newMicros - oldMicros,
       };
-
-      await fs.appendFile(fp, JSON.stringify(row) + "\n");
+      await fs.appendFile(path.join(dir, "dv360_deal_patches.ndjson"), JSON.stringify(row) + "\n");
       return outputSchema.parse({ success: true });
     };
 

@@ -1,10 +1,10 @@
+import "server-only";
 import { createTool, ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
 import { displayvideo_v1 } from "@googleapis/displayvideo";
 import { GoogleAuth } from "google-auth-library";
 import { withDemo } from "@/utils";
-import fs from "fs/promises";
-import path from "path";
+import { loadFixture, listFixtureNames } from "@/utils/fixtures";
 
 /**
  * Inputs: dealId (string), percent change (e.g. -10 to lower 10%)
@@ -50,18 +50,14 @@ export const dv360PatchDealBid = createTool<typeof inputSchema, typeof outputSch
 
     const real = async (): Promise<Dv360PatchDealBidOutput> => {
       const { dv360, advertiserId } = dv360Client();
-
-      // In many teams "dealId" is an internal handle; map it if needed.
       const lineItemId = String(dealId);
 
-      // 1) Fetch existing line item:
       const getRes = await dv360.advertisers.lineItems.get({
         advertiserId,
         lineItemId,
       });
       const lineItem = getRes.data;
 
-      // 2) Pull current fixed CPM micros
       const currentMicros = lineItem.bidStrategy?.fixedBid?.bidAmountMicros ?? null;
       if (currentMicros == null) {
         throw new Error(
@@ -69,12 +65,9 @@ export const dv360PatchDealBid = createTool<typeof inputSchema, typeof outputSch
         );
       }
       const oldMicros = Number(currentMicros);
+      const candidate  = Math.round(oldMicros * (1 + percent / 100));
+      const newMicros  = Math.max(candidate, 0);
 
-      // 3) Compute new CPM; guard negative/zero
-      const candidate = Math.round(oldMicros * (1 + percent / 100));
-      const newMicros = Math.max(candidate, 0);
-
-      // 4) Patch updated CPM (updateMask must target the int64 field)
       await dv360.advertisers.lineItems.patch({
         advertiserId,
         lineItemId,
@@ -84,7 +77,7 @@ export const dv360PatchDealBid = createTool<typeof inputSchema, typeof outputSch
             ...lineItem.bidStrategy,
             fixedBid: {
               ...lineItem.bidStrategy?.fixedBid,
-              bidAmountMicros: String(newMicros), // int64 field expects string
+              bidAmountMicros: String(newMicros),
             },
           },
         },
@@ -94,25 +87,25 @@ export const dv360PatchDealBid = createTool<typeof inputSchema, typeof outputSch
     };
 
     const fake = async (): Promise<Dv360PatchDealBidOutput> => {
-      // Synthesize a plausible old/new micros value and log it locally
-      const base = 2_000_000 + Math.floor(Math.random() * 1_000_000); // $2.00–$3.00 CPM
-      const oldMicros = base;
-      const newMicros = Math.max(Math.round(base * (1 + percent / 100)), 0);
+      // Try fixture: src/fixtures/dv360.patchDealBid/*.json
+      // Shape: { "oldMicros": 2500000, "newMicros": 2250000 }
+      try {
+        const variants = await listFixtureNames("dv360.patchDealBid");
+        if (variants.length) {
+          const data = (await loadFixture("dv360.patchDealBid", variants[0])) as
+            | { oldMicros?: number; newMicros?: number }
+            | null;
 
-      const dir = path.resolve(process.cwd(), ".runs", "demo-logs");
-      await fs.mkdir(dir, { recursive: true });
-      const fp = path.join(dir, "dv360_patch_bid.ndjson");
-      await fs.appendFile(
-        fp,
-        JSON.stringify({
-          ts: new Date().toISOString(),
-          dealId,
-          percent,
-          oldMicros,
-          newMicros,
-        }) + "\n"
-      );
+          if (data && (typeof data.oldMicros === "number" || typeof data.newMicros === "number")) {
+            const oldMicros = data.oldMicros ?? 2_000_000;
+            const newMicros = data.newMicros ?? Math.round(oldMicros * (1 + percent / 100));
+            return outputSchema.parse({ oldMicros, newMicros });
+          }
+        }
+      } catch { /* fallthrough */ }
 
+      const oldMicros = 2_000_000 + Math.floor(Math.random() * 1_000_000);
+      const newMicros = Math.max(Math.round(oldMicros * (1 + percent / 100)), 0);
       return outputSchema.parse({ oldMicros, newMicros });
     };
 

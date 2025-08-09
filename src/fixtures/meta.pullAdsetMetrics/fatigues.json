@@ -1,0 +1,4 @@
+[
+  { "adSetId": "123", "frequency": 7.1, "audienceSize": 42000 },
+  { "adSetId": "456", "frequency": 6.8, "audienceSize": 38000 }
+]

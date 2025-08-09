@@ -2,6 +2,7 @@ import "server-only";
 import { createTool, ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
 import { withDemo } from "@/utils";
+import { loadFixture, listFixtureNames } from "@/utils/fixtures";
 
 /**
  * Env:
@@ -58,7 +59,24 @@ export const metaSwapCreative = createTool<typeof inputSchema, typeof outputSche
     };
 
     const fake = async (): Promise<MetaSwapCreativeOutput> => {
-      // Pretend success; handy for UI demos and plan testing.
+      try {
+        // Prefer a fixture if one exists
+        const variants = await listFixtureNames("meta.swapCreative"); // looks under src/fixtures/meta.swapCreative
+        if (variants.length) {
+          const variant = variants[0]; // or pick one at random
+          const data = (await loadFixture(
+            "meta.swapCreative",
+            variant
+          )) as Partial<MetaSwapCreativeOutput> & { error?: string };
+
+          if (data?.error) throw new Error(`Demo failure: ${data.error}`);
+          return outputSchema.parse({ success: data?.success ?? true });
+        }
+      } catch {
+        // ignore + fall through to default
+      }
+
+      // Default synthetic success
       return { success: true };
     };
 
@@ -69,7 +87,7 @@ export const metaSwapCreative = createTool<typeof inputSchema, typeof outputSche
 export default metaSwapCreative;
 
 /**
-Note: In the Meta Marketing API you typically update the Ad’s creative (not the AdSet). 
-We keep the field name adSetId for back-compat with your plan, but treat it as the Ad ID. 
-If you truly have an AdSet ID, you’d first need to select a specific Ad under that AdSet to update.
+Note: In the Meta Marketing API you typically update the Ad’s creative (not the AdSet).
+We keep the field name adSetId for back-compat with your plan, but treat it as the Ad ID.
+If you truly have an AdSet ID, you’d first select an Ad under that AdSet to update.
  */

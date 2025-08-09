@@ -1,13 +1,12 @@
-import { createTool } from "@mastra/core/tools";
+import { createTool, ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
 import { withDemo, rand } from "@/utils";
-import fs from "fs/promises";
-import path from "path";
+import { loadFixture, listFixtureNames } from "@/utils/fixtures";
 
 /**
  * Inputs:
  *  - skus: list of seed SKUs
- *  - lookbackDays: how many days back to query (default 30)
+ *  - lookbackDays: days back to query (default 30)
  */
 export const inputSchema = z.object({
   skus: z.array(z.string()).nonempty(),
@@ -15,46 +14,30 @@ export const inputSchema = z.object({
 });
 export type AmcFetchPurchasersInput = z.infer<typeof inputSchema>;
 
-/**
- * Outputs:
- *  - sku: the seed SKU
- *  - purchaserIds: array of purchaser identifiers (e.g. shopper IDs)
- */
 export const outputSchema = z.array(
-  z.object({
-    sku: z.string(),
-    purchaserIds: z.array(z.string()),
-  })
+  z.object({ sku: z.string(), purchaserIds: z.array(z.string()) })
 );
 export type AmcFetchPurchasersOutput = z.infer<typeof outputSchema>;
 
-/**
- * Environment variables (REAL mode):
- *  AMC_API_ENDPOINT=https://api.your-amc.com
- *  AMC_API_KEY=...
- */
+/** REAL env */
 const AMC_ENDPOINT = process.env.AMC_API_ENDPOINT;
 const AMC_API_KEY  = process.env.AMC_API_KEY;
 
-export const amcFetchPurchasers = createTool({
+export const amcFetchPurchasers = createTool<typeof inputSchema, typeof outputSchema>({
   id:          "amc.fetchPurchasers",
   description: "Fetch last N-day purchaser IDs for each SKU from AMC.",
   inputSchema,
   outputSchema,
 
-  async execute({ context }) {
-    const { skus, lookbackDays } = inputSchema.parse(context as any);
+  async execute({ context }: ToolExecutionContext<typeof inputSchema>) {
+    const { skus, lookbackDays } = inputSchema.parse(context as unknown);
 
-    const real = async () => {
+    const real = async (): Promise<AmcFetchPurchasersOutput> => {
       if (!AMC_ENDPOINT || !AMC_API_KEY) {
-        throw new Error(
-          "AMC_API_ENDPOINT or AMC_API_KEY not set in env – unable to query AMC (tip: set DEMO_MODE=true to use fakes)."
-        );
+        throw new Error("AMC_API_ENDPOINT or AMC_API_KEY missing. Set env or run with DEMO_MODE=true.");
       }
 
       const results: AmcFetchPurchasersOutput = [];
-
-      // Query each SKU in turn (could be parallelized if desired)
       for (const sku of skus) {
         try {
           const url = new URL(`${AMC_ENDPOINT.replace(/\/+$/, "")}/purchasers`);
@@ -62,53 +45,44 @@ export const amcFetchPurchasers = createTool({
           url.searchParams.set("days", String(lookbackDays));
 
           const res = await fetch(url.toString(), {
-            headers: {
-              Authorization: `Bearer ${AMC_API_KEY}`,
-              Accept: "application/json",
-            },
+            headers: { Authorization: `Bearer ${AMC_API_KEY}`, Accept: "application/json" },
           });
-
-          if (!res.ok) {
-            const body = await res.text().catch(() => "");
-            throw new Error(`AMC error ${res.status}: ${body}`);
-          }
+          if (!res.ok) throw new Error(`AMC ${res.status}: ${await res.text().catch(() => "")}`);
 
           const json = (await res.json()) as { purchasers: string[] };
-          results.push({
-            sku,
-            purchaserIds: Array.isArray(json.purchasers) ? json.purchasers : [],
-          });
+          results.push({ sku, purchaserIds: Array.isArray(json.purchasers) ? json.purchasers : [] });
         } catch (e) {
-          // On error, push empty list so downstream steps still run
           console.warn(`amc.fetchPurchasers failed for SKU=${sku}:`, e);
           results.push({ sku, purchaserIds: [] });
         }
       }
-
       return outputSchema.parse(results);
     };
 
-    const fake = async () => {
-      // Try to use a fixture if available; else synthesize deterministic IDs
-      let fixture: Record<string, string[]> | null = null;
+    const fake = async (): Promise<AmcFetchPurchasersOutput> => {
+      // Try fixtures: src/fixtures/amc.fetchPurchasers/*.json
+      // Shape: { "SKU123": ["u1","u2",...], "SKU456": [...] }
       try {
-        const fp = path.resolve(process.cwd(), "specs/demo-fixtures/amc.purchasers.json");
-        fixture = JSON.parse(await fs.readFile(fp, "utf-8"));
-      } catch {
-        fixture = null;
-      }
-
-      const results: AmcFetchPurchasersOutput = skus.map((sku) => {
-        if (fixture?.[sku]) {
-          return { sku, purchaserIds: fixture![sku] };
+        const variants = await listFixtureNames("amc.fetchPurchasers");
+        if (variants.length) {
+          const fx = (await loadFixture("amc.fetchPurchasers", variants[0])) as Record<string, string[]>;
+          return outputSchema.parse(
+            skus.map((sku) => ({
+              sku,
+              purchaserIds: Array.isArray(fx[sku]) ? fx[sku] : [],
+            }))
+          );
         }
-        // Synthesize between 120–520 IDs, stable-ish via rand()
-        const n = 120 + Math.floor(rand() * 401);
-        const purchaserIds = Array.from({ length: n }, (_, i) => `u${i}_${Math.floor(rand() * 1e9)}`);
-        return { sku, purchaserIds };
-      });
+      } catch { /* fallthrough */ }
 
-      return outputSchema.parse(results);
+      // Synthetic fallback (deterministic-ish)
+      return outputSchema.parse(
+        skus.map((sku) => {
+          const n = 120 + Math.floor(rand() * 401);
+          const ids = Array.from({ length: n }, (_, i) => `u${i}_${Math.floor(rand() * 1e9)}`);
+          return { sku, purchaserIds: ids };
+        })
+      );
     };
 
     return withDemo(real, fake);

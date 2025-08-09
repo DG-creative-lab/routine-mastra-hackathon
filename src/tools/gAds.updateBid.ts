@@ -1,125 +1,168 @@
 import "server-only";
 import { createTool, ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
-import { GoogleAdsApi } from "google-ads-api";
-import { withDemo } from "@/utils";
+import { GoogleAuth } from "google-auth-library";
+import { BetaAnalyticsDataClient } from "@google-analytics/data";
+import { withDemo, rand } from "@/utils";
+import { loadFixture, listFixtureNames } from "@/utils/fixtures";
+
+/*──────────────────────────────────────────────────────────────┐
+  Env
+ └──────────────────────────────────────────────────────────────*/
+const PROPERTY_ID = process.env.GA4_PROPERTY_ID ?? "";
+const KEY_FILE    = process.env.GA4_KEY_FILE ?? "";
+const DEFAULT_METRICS    = (process.env.GA4_DEFAULT_METRICS ?? "totalRevenue")
+  .split(",").map(s => s.trim()).filter(Boolean);
+const DEFAULT_DIMENSIONS = (process.env.GA4_DEFAULT_DIMENSIONS ?? "date")
+  .split(",").map(s => s.trim()).filter(Boolean);
 
 /*──────────────────────────────────────────────────────────────┐
   Schemas
  └──────────────────────────────────────────────────────────────*/
 export const inputSchema = z.object({
-  campaignId: z.number(),
-  percent: z.number().min(-100).max(100),
+  lookbackDays : z.number().int().min(1).max(30).default(1),
+  metrics      : z.array(z.string()).optional(),
+  dimensions   : z.array(z.string()).optional(),
+  computeRoas  : z.object({
+    revenueMetric: z.string(),
+    costMetric:    z.string(),
+  }).optional(),
 });
-export type GAdsUpdateBidInput = z.infer<typeof inputSchema>;
+export type Ga4PullInput = z.infer<typeof inputSchema>;
 
 export const outputSchema = z.object({
-  oldMicros: z.number(),
-  newMicros: z.number(),
+  headers: z.array(z.string()),
+  rows:    z.array(z.record(z.union([z.string(), z.number(), z.null()]))),
+  roas:    z.number().optional(),
 });
-export type GAdsUpdateBidOutput = z.infer<typeof outputSchema>;
+export type Ga4PullOutput = z.infer<typeof outputSchema>;
 
-/*──────────────────────────────────────────────────────────────┐
-  Client bootstrap
- └──────────────────────────────────────────────────────────────*/
-const GADS_CLIENT_ID     = process.env.GADS_CLIENT_ID ?? "";
-const GADS_CLIENT_SECRET = process.env.GADS_CLIENT_SECRET ?? "";
-const GADS_DEV_TOKEN     = process.env.GADS_DEV_TOKEN ?? "";
-const GADS_CUST_ID       = process.env.GADS_CUST_ID ?? "";
-const GADS_REFRESH       = process.env.GADS_REFRESH ?? "";
+type Ga4RowObj = Record<string, string | number | null>;
+const fmt = (d: Date) => d.toISOString().slice(0, 10);
 
-function assertEnv() {
-  const miss: string[] = [];
-  if (!GADS_CLIENT_ID)     miss.push("GADS_CLIENT_ID");
-  if (!GADS_CLIENT_SECRET) miss.push("GADS_CLIENT_SECRET");
-  if (!GADS_DEV_TOKEN)     miss.push("GADS_DEV_TOKEN");
-  if (!GADS_CUST_ID)       miss.push("GADS_CUST_ID");
-  if (!GADS_REFRESH)       miss.push("GADS_REFRESH");
-  if (miss.length) {
-    throw new Error(`Missing Google Ads env: ${miss.join(", ")}. Set them or enable DEMO_MODE.`);
+function toRow(headers: string[], row: any): Ga4RowObj {
+  const out: Ga4RowObj = {};
+  let di = 0, mi = 0;
+  const dimCount = (row.dimensionValues?.length ?? 0);
+  const metCount = (row.metricValues?.length ?? 0);
+
+  for (const key of headers) {
+    if (di < dimCount) {
+      out[key] = row.dimensionValues[di++]?.value ?? null;
+    } else if (mi < metCount) {
+      const v = row.metricValues[mi++]?.value ?? null;
+      out[key] = (v != null && v !== "" && !Number.isNaN(Number(v))) ? Number(v) : v;
+    } else {
+      out[key] = null;
+    }
   }
+  return out;
 }
 
-const gads = new GoogleAdsApi({
-  client_id:     GADS_CLIENT_ID,
-  client_secret: GADS_CLIENT_SECRET,
-  developer_token: GADS_DEV_TOKEN,
-});
-
-// Minimal GAQL row shape
-type BudgetRow = {
-  campaign_budget?: {
-    resource_name?: string;
-    amount_micros?: string | number | null;
-  };
-};
-
-export const gAdsUpdateBid = createTool<typeof inputSchema, typeof outputSchema>({
-  id: "gAds.updateBid",
-  description: "Apply a %-based bid/budget adjustment to a Google Ads campaign.",
+export const ga4Pull = createTool<typeof inputSchema, typeof outputSchema>({
+  id: "ga4.pull",
+  description: "GA4 runReport wrapper. Returns rows, headers, and optional aggregate ROAS.",
   inputSchema,
   outputSchema,
 
   async execute({ context }: ToolExecutionContext<typeof inputSchema>) {
-    const { campaignId, percent } = inputSchema.parse(context as unknown);
+    const { lookbackDays, metrics, dimensions, computeRoas } = inputSchema.parse(context as unknown);
 
-    const real = async (): Promise<GAdsUpdateBidOutput> => {
-      assertEnv();
+    const real = async (): Promise<Ga4PullOutput> => {
+      if (!PROPERTY_ID) throw new Error("GA4_PROPERTY_ID is not set.");
+      if (!KEY_FILE)    throw new Error("GA4_KEY_FILE is not set (service-account JSON path).");
 
-      const customer = gads.Customer({
-        customer_id:  GADS_CUST_ID,
-        refresh_token: GADS_REFRESH,
-      });
+      const end   = new Date();
+      const start = new Date(end);
+      start.setDate(end.getDate() - lookbackDays);
 
-      // 1) Query the campaign budget (single row)
-      const stream = customer.queryStream<BudgetRow>(`
-        SELECT campaign_budget.resource_name,
-               campaign_budget.amount_micros
-        FROM   campaign
-        WHERE  campaign.id = ${campaignId}
-        LIMIT  1
-      `);
+      const auth   = new GoogleAuth({ keyFile: KEY_FILE, scopes: ["https://www.googleapis.com/auth/analytics.readonly"] });
+      const client = new BetaAnalyticsDataClient({ auth });
 
-      let row: BudgetRow | undefined;
-      for await (const r of stream) { row = r; break; }
+      const req = {
+        property: `properties/${PROPERTY_ID}`,
+        dateRanges: [{ startDate: fmt(start), endDate: fmt(end) }],
+        metrics:    (metrics ?? DEFAULT_METRICS).map((name) => ({ name })),
+        dimensions: (dimensions ?? DEFAULT_DIMENSIONS).map((name) => ({ name })),
+      };
 
-      if (!row?.campaign_budget?.resource_name || row.campaign_budget.amount_micros == null) {
-        throw new Error(`Campaign ${campaignId} not found or has no budget.`);
+      const [res] = await client.runReport(req);
+
+      const headers: string[] = [
+        ...(res.dimensionHeaders ?? []).map((h) => h.name || "").filter(Boolean),
+        ...(res.metricHeaders    ?? []).map((h) => h.name || "").filter(Boolean),
+      ];
+
+      const rows = (res.rows ?? []).map((r) => toRow(headers, r));
+
+      let roas: number | undefined;
+      if (computeRoas) {
+        const rev  = rows.reduce((a, r) => a + (Number(r[computeRoas.revenueMetric]) || 0), 0);
+        const cost = rows.reduce((a, r) => a + (Number(r[computeRoas.costMetric])    || 0), 0);
+        roas = cost > 0 ? rev / cost : 0;
       }
 
-      const budgetResName = String(row.campaign_budget.resource_name);
-      const oldMicros     = Number(row.campaign_budget.amount_micros);
-      const newMicros     = Math.round(oldMicros * (1 + percent / 100));
-
-      // 2) Mutate – update mask must target amount_micros
-      // Using raw service to avoid dependency on versioned helpers
-      const svc: any = (customer as any).getService("CampaignBudgetServiceClient");
-      await svc.mutateCampaignBudgets({
-        customerId: GADS_CUST_ID,
-        operations: [
-          {
-            update: {
-              resourceName: budgetResName,
-              // google-ads expects int64 as string or BigInt; this client accepts BigInt
-              amountMicros: BigInt(newMicros),
-            },
-            updateMask: { paths: ["amount_micros"] },
-          },
-        ],
-      });
-
-      return outputSchema.parse({ oldMicros, newMicros });
+      return outputSchema.parse({ headers, rows, roas });
     };
 
-    const fake = async (): Promise<GAdsUpdateBidOutput> => {
-      // Choose a consistent fake baseline and apply percent
-      const oldMicros = 2_000_000; // $2.00
-      const newMicros = Math.round(oldMicros * (1 + percent / 100));
-      return outputSchema.parse({ oldMicros, newMicros });
+    const fake = async (): Promise<Ga4PullOutput> => {
+      // Try fixture first: src/fixtures/ga4.pull/*.json
+      // Supported fixture shapes:
+      //  1) { "headers": [...], "rows": [...], "roas": 3.2 }
+      //  2) [ {date: "...", metricA: 123, ...}, ... ]  (headers inferred)
+      try {
+        const variants = await listFixtureNames("ga4.pull");
+        if (variants.length) {
+          const data = await loadFixture("ga4.pull", variants[0]);
+          if (Array.isArray(data)) {
+            const keys = new Set<string>();
+            data.forEach((r: Record<string, any>) => Object.keys(r).forEach(k => keys.add(k)));
+            const headers = Array.from(keys);
+            return outputSchema.parse({ headers, rows: data as any[], roas: undefined });
+          } else if (data && typeof data === "object") {
+            const { headers, rows, roas } = data as any;
+            if (Array.isArray(headers) && Array.isArray(rows)) {
+              return outputSchema.parse({ headers, rows, roas });
+            }
+          }
+        }
+      } catch { /* fallthrough to synthetic */ }
+
+      // Synthetic timeseries
+      const dims = dimensions ?? DEFAULT_DIMENSIONS;
+      const mets = metrics ?? DEFAULT_METRICS;
+
+      const end   = new Date();
+      const start = new Date(end);
+      start.setDate(end.getDate() - lookbackDays);
+
+      const headers = [...dims, ...mets];
+      const days: string[] = [];
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) days.push(fmt(d));
+
+      const rows: Ga4RowObj[] = days.map((date) => {
+        const row: Ga4RowObj = {};
+        for (const d of dims) row[d] = d.toLowerCase() === "date" ? date : d;
+        for (const m of mets) row[m] = Number((100 + rand() * 300).toFixed(2));
+        if (computeRoas) {
+          row[computeRoas.revenueMetric] = Number((200 + rand() * 800).toFixed(2));
+          row[computeRoas.costMetric]    = Number((50 + rand() * 300).toFixed(2));
+        }
+        return row;
+      });
+
+      let roas: number | undefined;
+      if (computeRoas) {
+        const rev  = rows.reduce((a, r) => a + (Number(r[computeRoas.revenueMetric]) || 0), 0);
+        const cost = rows.reduce((a, r) => a + (Number(r[computeRoas.costMetric])    || 0), 0);
+        roas = cost > 0 ? Number((rev / cost).toFixed(3)) : 0;
+      }
+
+      return outputSchema.parse({ headers, rows, roas });
     };
 
     return withDemo(real, fake);
   },
 });
 
-export default gAdsUpdateBid;
+export default ga4Pull;

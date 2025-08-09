@@ -1,0 +1,4 @@
+[
+  { "sku": "SKU-123", "purchaserIds": ["u1001", "u1002", "u1005"] },
+  { "sku": "SKU-456", "purchaserIds": ["u2001"] }
+]

@@ -1,42 +1,29 @@
-import "server-only";
 import { createTool, ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
 import { withDemo, rand } from "@/utils";
+import { loadFixture, listFixtureNames } from "@/fixtures/registry";
 
 /**
- * Env:
- *   META_ACCESS_TOKEN=  // Marketing API token with ads_read
+ * Input: list of Ad Set IDs to fetch metrics for.
+ * Output: frequency and reach (used as audienceSize) per Ad Set.
  */
-
 export const inputSchema = z.object({
   adSetIds: z.array(z.string()).nonempty(),
-  /** Optional window (hours). We still pass date-based range to Graph API. */
-  lookbackHours: z.number().int().min(1).max(72).default(24),
 });
 export type MetaPullAdsetMetricsInput = z.infer<typeof inputSchema>;
 
 export const outputSchema = z.array(
   z.object({
     adSetId: z.string(),
-    frequency: z.number(),     // average frequency
-    audienceSize: z.number(),  // reach (used as audience proxy)
+    frequency: z.number(),
+    audienceSize: z.number(),
   })
 );
 export type MetaPullAdsetMetricsOutput = z.infer<typeof outputSchema>;
 
-// Minimal zod schema for the Graph API "insights" response we use
-const insightsRowSchema = z.object({
-  frequency: z.string().optional(),
-  reach: z.string().optional(),
-});
-const insightsResponseSchema = z.object({
-  data: z.array(insightsRowSchema).optional().default([]),
-});
-
-function ymd(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
-
+/* ────────────────────────────────────────────────────────────
+   Real Graph API call for a single ad set
+   ──────────────────────────────────────────────────────────── */
 async function fetchAdsetInsights(params: {
   adSetId: string;
   since: string; // YYYY-MM-DD
@@ -53,23 +40,23 @@ async function fetchAdsetInsights(params: {
     access_token: accessToken,
   });
 
-  const url = `${base}?${search.toString()}`;
-  const res = await fetch(url, { method: "GET", headers: { Accept: "application/json" } });
-
+  const res = await fetch(`${base}?${search}`, { headers: { Accept: "application/json" } });
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Meta insights request failed (${res.status}): ${text}`);
+    const txt = await res.text().catch(() => "");
+    throw new Error(`Meta insights request failed (${res.status}): ${txt}`);
   }
+  const json = (await res.json()) as any;
+  const row = Array.isArray(json?.data) && json.data[0] ? json.data[0] : { frequency: "0", reach: "0" };
 
-  const json = (await res.json()) as unknown;
-  const parsed = insightsResponseSchema.parse(json);
-  const row = parsed.data[0] ?? { frequency: "0", reach: "0" };
-  const frequency = parseFloat(row.frequency ?? "0") || 0;
-  const audienceSize = parseFloat(row.reach ?? "0") || 0;
-
-  return { frequency, audienceSize };
+  return {
+    frequency: Number(row.frequency ?? 0) || 0,
+    audienceSize: Number(row.reach ?? 0) || 0,
+  };
 }
 
+/* ────────────────────────────────────────────────────────────
+   Tool
+   ──────────────────────────────────────────────────────────── */
 export const metaPullAdsetMetrics = createTool<typeof inputSchema, typeof outputSchema>({
   id: "meta.pullAdsetMetrics",
   description: "Pull each AdSet’s frequency & reach (audienceSize) via Meta Marketing API.",
@@ -77,53 +64,67 @@ export const metaPullAdsetMetrics = createTool<typeof inputSchema, typeof output
   outputSchema,
 
   async execute({ context }: ToolExecutionContext<typeof inputSchema>) {
-    const { adSetIds, lookbackHours } = inputSchema.parse(context as unknown);
+    const { adSetIds } = inputSchema.parse(context as unknown);
 
+    // --- REAL path (Graph API) ---
     const real = async (): Promise<MetaPullAdsetMetricsOutput> => {
       const token = process.env.META_ACCESS_TOKEN;
       if (!token) {
-        throw new Error("META_ACCESS_TOKEN is not set. Provide a valid Meta access token or enable DEMO_MODE.");
+        throw new Error("META_ACCESS_TOKEN is not set. Provide a valid token or enable DEMO_MODE.");
       }
 
       const now = new Date();
-      const sinceDate = new Date(now.getTime() - lookbackHours * 60 * 60 * 1000);
-      // Graph API time_range is date-based; collapse to YYYY-MM-DD
-      const since = ymd(sinceDate);
-      const until = ymd(now);
+      const since = new Date(now.getTime() - 1000 * 60 * 60).toISOString().slice(0, 10);
+      const until = now.toISOString().slice(0, 10);
 
       const out: MetaPullAdsetMetricsOutput = [];
       for (const adSetId of adSetIds) {
         try {
-          const { frequency, audienceSize } = await fetchAdsetInsights({
-            adSetId,
-            since,
-            until,
-            accessToken: token,
-          });
+          const { frequency, audienceSize } = await fetchAdsetInsights({ adSetId, since, until, accessToken: token });
           out.push({ adSetId, frequency, audienceSize });
-        } catch (e) {
-          // Keep pipeline resilient per-adset
+        } catch {
+          // keep tool robust: zeros on per-id failure
           out.push({ adSetId, frequency: 0, audienceSize: 0 });
         }
       }
-      return out;
+      return outputSchema.parse(out);
     };
 
+    // --- DEMO path (fixtures or synthetic) ---
     const fake = async (): Promise<MetaPullAdsetMetricsOutput> => {
-      // Synthetic but plausible: freq 2–9, audience 20k–250k,
-      // with occasional “fatigue” (freq > 6 or audience < 50k).
-      return adSetIds.map((adSetId, i) => {
-        const base = rand(); // seeded in utils for determinism
-        const frequency = Number((2 + base * 7).toFixed(2));              // 2–9
-        const audienceSize = Math.round(20000 + base * 230000);           // 20k–250k
-        // small nudge so some IDs cross thresholds:
-        const nudge = (i % 3 === 0) ? 1.8 : 0.9;
-        return {
-          adSetId,
-          frequency: Number((frequency * nudge).toFixed(2)),
-          audienceSize: Math.max(0, Math.round(audienceSize / nudge)),
-        };
-      });
+      try {
+        const variants = await listFixtureNames("meta.pullAdsetMetrics");
+        const variant = variants[0] ?? "baseline";
+        const data = await loadFixture(
+          "meta.pullAdsetMetrics",
+          variant
+        ) as Array<{ adSetId?: string; frequency: number; audienceSize: number }> | Record<string, { frequency: number; audienceSize: number }>;
+
+        // Support both array and object-map fixtures
+        const map: Record<string, { frequency: number; audienceSize: number }> = Array.isArray(data)
+          ? Object.fromEntries(data.map((r, i) => [r.adSetId ?? `fixture-${i}`, { frequency: r.frequency, audienceSize: r.audienceSize }]))
+          : data;
+
+        return outputSchema.parse(
+          adSetIds.map((id, i) => {
+            const m = map[id] ?? null;
+            return {
+              adSetId: id,
+              frequency: m?.frequency ?? Number((1 + rand() * 8).toFixed(2)),   // ~1–9
+              audienceSize: m?.audienceSize ?? Math.floor(30000 + rand() * 170000), // 30k–200k
+            };
+          })
+        );
+      } catch {
+        // Fully synthetic fallback
+        return outputSchema.parse(
+          adSetIds.map((id) => ({
+            adSetId: id,
+            frequency: Number((1 + rand() * 8).toFixed(2)),
+            audienceSize: Math.floor(30000 + rand() * 170000),
+          }))
+        );
+      }
     };
 
     return withDemo(real, fake);
