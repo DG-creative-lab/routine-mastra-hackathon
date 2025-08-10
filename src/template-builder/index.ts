@@ -13,21 +13,20 @@ import {
 import type { CriticRule } from "../types/agents";
 import type { BuildOptions,  ToolBinding } from "./types";
 import type { RoutinePlan } from "@/types/canonical";
-import type { ObserverSpec } from "@/types/agents";
+import type { ObserverSpec, PlannerOutput } from "@/types/agents";
 
 /** Pull critic rules & observer spec out of PlannerOutput (loose shape on purpose) */
-function extractCriticsAndObserver(agentSpecs?: any): { critics: CriticRule[]; observer?: ObserverSpec } {
+function extractCriticsAndObserver(agentSpecs?: PlannerOutput): { critics: CriticRule[]; observer?: ObserverSpec } {
   const critics: CriticRule[] = [];
   let observer: ObserverSpec | undefined;
 
   if (!agentSpecs?.agent_specs) return { critics, observer };
 
-  for (const ch of agentSpecs.agent_specs as any[]) {
+  for (const ch of agentSpecs.agent_specs) {
     for (const a of ch.agents ?? []) {
       if (a.role === "critic") {
-        // Accept either `rules` or `critic_rules`
-        const rules = a.rules ?? a.critic_rules ?? [];
-        for (const r of rules) {
+        const rules = (a as any).rules ?? (a as any).critic_rules ?? [];
+        for (const r of rules as any[]) {
           critics.push({
             id: r.id ?? `${ch.channel_id}.${a.name}.${r.name ?? "rule"}`,
             name: r.name ?? "unnamed",
@@ -39,10 +38,10 @@ function extractCriticsAndObserver(agentSpecs?: any): { critics: CriticRule[]; o
         }
       } else if (a.role === "observer" && !observer) {
         observer = {
-          counters: a.counters ?? [],
-          gauges: a.gauges ?? [],
-          events: a.events ?? [],
-          notes: a.instructions ?? "",
+          counters: (a as any).counters ?? [],
+          gauges:   (a as any).gauges ?? [],
+          events:   (a as any).events ?? [],
+          notes:    a.instructions ?? "",
         };
       }
     }
@@ -73,7 +72,7 @@ export async function buildFromPlan(opts: BuildOptions) {
   }
 
   // Extract critics & observer (if any)
-  const { critics, observer } = extractCriticsAndObserver(agentSpecs);
+  const { critics, observer } = extractCriticsAndObserver(agentSpecs as PlannerOutput | undefined);
 
   // Write core files
   await fs.writeFile(path.join(outDir, "plan.json"), file_planJson(raw), "utf-8");

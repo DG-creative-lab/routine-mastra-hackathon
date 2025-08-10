@@ -1,42 +1,21 @@
 import OpenAI from "openai";
 import { SYSTEM_PROMPT, buildUserPrompt } from "./prompt";
-import { CanonicalSpec, RoutineStep } from "../types/canonical";
 
-// ---------- NEW TYPES ----------
-export type AgentRole = "planner" | "executor" | "critic" | "observer";
+import type { CanonicalSpec, RoutineStep } from "@/types/canonical";
+import type { PlannerOutput } from "@/types/agents";
 
-export type AgentSpecItem = {
-  role: AgentRole;
-  name: string;
-  instructions?: string;
-  tools_allowed?: string[];
-  kpis?: string[];
-  guardrails?: string[];
-  routine_steps?: RoutineStep[]; // only planner will include steps
-};
-
-export type AgentSpec = {
-  channel_id: string;      // e.g. "search_bid_guardian"
-  agents: AgentSpecItem[];
-};
-
-export type PlannerOutput = {
-  agent_specs: AgentSpec[];
-};
-
-// ---------- UTILS ----------
+// ---------- utils ----------
 function safeJsonParse(s: string): any {
   try {
-    // strip code fences if any
-    const trimmed = s.trim().replace(/^```(json)?\n?/i, "").replace(/```$/, "");
+    const trimmed = s.trim().replace(/^```(?:json)?\n?/i, "").replace(/```$/, "");
     return JSON.parse(trimmed);
-  } catch (e) {
+  } catch {
     throw new Error("LLM did not return valid JSON for agent_specs.");
   }
 }
 
-// ---------- NEW: makeAgentSpecs ----------
-export async function makeAgentSpecs(spec: CanonicalSpec): Promise<PlannerOutput> {
+// ---------- makeAgentSpecs ----------
+export async function makeAgentSpecs(specs: CanonicalSpec[]): Promise<PlannerOutput> {
   const openai = new OpenAI({
     baseURL: "https://openrouter.ai/api/v1",
     apiKey: process.env.OPENROUTER_API_KEY!,
@@ -46,23 +25,21 @@ export async function makeAgentSpecs(spec: CanonicalSpec): Promise<PlannerOutput
     model: "openrouter/horizon-beta",
     temperature: 0.2,
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },       // must instruct to return { agent_specs: [...] }
-      { role: "user", content: buildUserPrompt(spec) }, // pass CanonicalSpec[] with tools/workflow_brief
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: buildUserPrompt(specs) },
     ],
   });
 
   const content = completion.choices[0]?.message?.content ?? "{}";
   const parsed = safeJsonParse(content);
 
-  // basic shape guard
   if (!parsed || !Array.isArray(parsed.agent_specs)) {
     throw new Error("agent_specs missing or not an array in planner output.");
   }
-
   return parsed as PlannerOutput;
 }
 
-// ---------- NEW: flatten sub-agent plans → RoutineStep[] ----------
+// ---------- flatten sub-agent plans → RoutineStep[] ----------
 export function flattenToRoutinePlan(out: PlannerOutput): RoutineStep[] {
   const steps: RoutineStep[] = [];
   let id = 1;
@@ -75,17 +52,14 @@ export function flattenToRoutinePlan(out: PlannerOutput): RoutineStep[] {
       steps.push({
         ...s,
         id: id++,
-        // keep original if present; otherwise carry over tool/inputs/outputs/condition
         tool: s.tool,
         inputs: s.inputs ?? {},
         outputs: s.outputs ?? [],
         condition: s.condition,
-        // optional: tag step with agent/channel for middleware/logs
-        // @ts-ignore
+        // tag for logs if you want: @ts-expect-error tag for internal use
         agent: `${ch.channel_id}:planner`,
       });
     }
   }
-
   return steps;
 }
