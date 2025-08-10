@@ -1,8 +1,7 @@
-import OpenAI from "openai";
 import { SYSTEM_PROMPT, buildUserPrompt } from "./prompt";
-
 import type { CanonicalSpec, RoutineStep } from "@/types/canonical";
 import type { PlannerOutput } from "@/types/agents";
+import { getLLM, LLM_MODEL } from "@/utils/llm";
 
 // ---------- utils ----------
 function safeJsonParse(s: string): any {
@@ -16,13 +15,10 @@ function safeJsonParse(s: string): any {
 
 // ---------- makeAgentSpecs ----------
 export async function makeAgentSpecs(specs: CanonicalSpec[]): Promise<PlannerOutput> {
-  const openai = new OpenAI({
-    baseURL: "https://openrouter.ai/api/v1",
-    apiKey: process.env.OPENROUTER_API_KEY!,
-  });
+  const llm = getLLM();
 
-  const completion = await openai.chat.completions.create({
-    model: "openrouter/horizon-beta",
+  const completion = await llm.chat.completions.create({
+    model: LLM_MODEL,
     temperature: 0.2,
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
@@ -56,7 +52,6 @@ export function flattenToRoutinePlan(out: PlannerOutput): RoutineStep[] {
         inputs: s.inputs ?? {},
         outputs: s.outputs ?? [],
         condition: s.condition,
-        // tag for logs if you want: @ts-expect-error tag for internal use
         agent: `${ch.channel_id}:planner`,
       });
     }

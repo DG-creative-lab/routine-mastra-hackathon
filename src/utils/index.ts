@@ -5,3 +5,4 @@ export { zipDirToStream } from "./zip";
 export { logger } from "./logger";
 export * from "./demo"; 
 export * from "./fixtures";
+export * from "./llm";
