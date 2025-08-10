@@ -24,6 +24,8 @@
     "@google-cloud/bigquery": "^8.1.1",
     "@googleapis/displayvideo": "^32.3.0",
     "@mastra/core": "^0.13.1",
+    "@upstash/ratelimit": "^2.0.6",
+    "@upstash/redis": "^1.35.3",
     "archiver": "^7.0.1",
     "dotenv": "^17.2.1",
     "google-ads-api": "^20.0.1",
