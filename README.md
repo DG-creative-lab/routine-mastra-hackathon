@@ -1,258 +1,189 @@
-## ✨ Meta-Template-Builder
+# Meta Template Builder
 
+Generate Mastra-ready templates from natural-language marketing specs using a Routine-style planner (planner · executor · critic · observer), with first-class demo mode and fixtures.
 
-### 📂 Repo layout
-
+## Repo Layout
 
 ```bash
 routine-mastra-hackathon/
-├─ src/                  # ← all runtime code lives here
-│  ├─ cli/               # wrapper commands (exposed via pnpm scripts)
-│  │   └─ index.ts
-│  ├─ parser/
-│  │   ├─ agents_spec.json   # ← editable by humans
-│  │   ├─ schema.ts          # zod schema
-│  │   ├─ normalize.ts
-│  │   └─ index.ts           # exports parseAndNormalize()
-│  ├─ meta-planner/
-│  │   ├─ planner.ts         # orchestrator
-│  │   ├─ prompt.ts          # system + few-shot builder
-│  │   ├─ plan.json          # auto-generated (git-ignored ✅)
-│  │   └─ plan.example.json  # miniature reference (checked-in)
-│  ├─ template-builder/
-│  │   ├─ scaffold.ts        # wrappers for mastra.scaffold, docs, etc.
-│  │   └─ index.ts
-│  ├─ tools/                 # reusable SDK wrappers (GA4, DV360, etc.)
-│  │   ├─ ga4.pull.ts
-│  │   ├─ gAds.updateBid.ts
-│  │   └─ …
-│  ├─ types/                 # shared TypeScript interfaces
-│  │   └─ canonical.ts
-│  └─ utils/                 # misc helpers (fs, logger, etc.)
-│      └─ logger.ts
-│
-├─ generated-templates/  # ← created at runtime; **git-ignored**
-│   └─ search-monitoring-prediction/ … 
-│
-├─ .vscode/              # editor settings (optional)
-├─ .gitignore
-├─ .eslintrc.json
-├─ .prettierrc
-├─ .env.example
-├─ mastrarc.js
-├─ package.json
-├─ pnpm-lock.yaml
-├─ tsconfig.json
+├─ app/                         # Next.js App Router (UI + APIs)
+│  └─ api/generate/route.ts     # POST: parse → plan → scaffold → return file tree
+├─ src/
+│  ├─ cli/                      # Optional CLI shims
+│  ├─ meta-planner/             # LLM planner → agent_specs + flatten → Routine plan
+│  │  ├─ index.ts               # Barrel (exports makeAgentSpecs, flattenToRoutinePlan)
+│  │  ├─ planner.ts             # OpenRouter call + parsers
+│  │  └─ prompt.ts              # System + few-shot prompt builders
+│  ├─ parser/                   # Parse & normalise agent specs
+│  │  ├─ schema.ts              # Zod schemas
+│  │  ├─ normalize.ts           # Canonicalisation helpers
+│  │  └─ index.ts               # parseSpec(raw|obj) → CanonicalSpecMap
+│  ├─ template-builder/         # Scaffolder: plan → template folder
+│  │  ├─ index.ts               # buildFromPlan({ plan, agentSpecs, outDir, ... })
+│  │  ├─ scaffolders.ts         # file_* renderers (workflow, critics, observer, ...)
+│  │  └─ registry.ts            # Tool binding registry (tool id → import/invoke)
+│  ├─ tools/                    # Production tools with demo augmentation
+│  │  ├─ ga4.pull.ts            # GA4 wrapper
+│  │  ├─ gAds.updateBid.ts      # Google Ads budget/bid patch
+│  │  ├─ dv360.fetchStats.ts    # DV360 CPMs (BQ+fixtures)
+│  │  ├─ dv360.patchDealBid.ts  # DV360 line item patch
+│  │  ├─ meta.pullAdsetMetrics.ts
+│  │  ├─ meta.swapCreative.ts
+│  │  ├─ amc.fetchPurchasers.ts
+│  │  ├─ amc.createLookAlike.ts
+│  │  └─ amc.exportToAdsConsole.ts
+│  ├─ fixtures/                 # Built-in demo fixtures (JSON)
+│  │  ├─ dv360.fetchStats/*.json
+│  │  ├─ meta.pullAdsetMetrics/*.json
+│  │  ├─ ga4.pull/*.json
+│  │  ├─ amc.fetchPurchasers/*.json
+│  │  └─ amc.createLookAlike/*.json
+│  ├─ utils/
+│  │  ├─ demo.ts                # withDemo(real,fake) + rand/pick/sleep
+│  │  ├─ fixtures.ts            # loadFixture(id,variant) / listFixtureNames(id)
+│  │  ├─ fsTree.ts              # dir → JSON tree
+│  │  ├─ zip.ts                 # zip helper
+│  │  └─ logger.ts
+│  └─ types/
+│     ├─ canonical.ts           # CanonicalSpec, RoutineStep (unified)
+│     └─ agents.ts              # Agent roles, PlannerOutput, CriticRule, ObserverSpec
+├─ .runs/                       # Per-request outputs (UI) – **git-ignored**
+│  └─ <uuid>/
+│     ├─ agents.json
+│     ├─ plan.json
+│     └─ generated-templates/
+├─ .env.example                 # See below
+├─ package.json / pnpm-lock.yaml / tsconfig.json
 └─ README.md
 ```
 
----
+## Concepts (Routine-style)
 
-Goal: Auto-generate Mastra templates from structured marketing needs.
+- **Planner** – turns a normalised spec into an ordered Routine plan (steps).
+- **Executor** – the generated workflow that calls bound tools with typed inputs.
+- **Critic** – guard-rails expressed as rules (e.g., max bid change ≤ 25%). Emitted to critics.ts.
+- **Observer** – telemetry (events, counters) emitted to observer.ts.
+- **Demo mode** – tools call withDemo(real, fake) and optionally load JSON fixtures so the whole system works without external credentials.
 
-| Folder | Why it belongs in src/ |
-|--------|------------------------|
-| cli/ | Thin façade so "pnpm cli my-command" imports internal modules without ugly relative paths (import { parse } from "@/parser"). |
-| parser/ | Pure data-prep ♥ type-safe → owned by your runtime, not the repo root. |
-| meta-planner/ | Generates the top-level **plan.json** but is itself application code. |
-| template-builder/ | Runtime that stitches Routine → Mastra. Keeps src the single import root. |
-| tools/ | SDK adaptors are code, not config. Living inside src means TS paths/aliases work. |
-| types/ | Co-locate shared interfaces so all modules can import { CanonicalSpec } from "@/types". |
-| utils/ | Logger, tiny FS helpers, etc. go here to avoid duplication. |
+### Data Flow
 
-
-
----
+```
+requirements.json → parser → CanonicalSpec[]
+  → meta-planner (LLM) → agent_specs.json → flatten → plan.json
+  → template-builder → generated-templates/(workflow.ts + critics.ts + observer.ts + ...)
+```
 
 ## Quick Start
+
+### UI Flow (Recommended)
+
 ```bash
-git clone https://github.com/ai-knowledge-hub/all-hands/tree/main/routine-powered-performance-agents/meta-template-builder
-cd meta-template-builder
 pnpm install
-
-# Build a template from the holistic_monitoring_prediction spec
-pnpm meta-build ./specs/holistic_monitoring_prediction.json
-
-# Run the workflow locally
-pnpm meta-dev ./templates/holistic_monitoring_prediction
+pnpm dev       # Next.js dev server
 ```
 
----
+1. Open http://localhost:3000
+2. Upload requirements.json
+3. (Optional) paste variables JSON for .env.example
+4. Click Generate → see file tree + download
 
-### 1 ️⃣ Parser (./parser/*)
-
-Purpose
-
-Guarantee every downstream component receives a strict, typed spec. 
-
-```ts
-// parser/schema.ts (excerpt)
-export const Requirements = z.object({
-  tagline: z.string(),
-  required_features: z.object({
-    core_capability: z.string(),
-    data_visibility: z.array(z.string()),
-    actions: z.array(z.string()),
-    insights: z.array(z.string())
-  }),
-  success_metrics: z.record(z.any()),
-  timeline: z.record(z.any())
-});
-
-// parser/index.ts
-export function parseSpec(path: string) {
-  const raw = JSON.parse(fs.readFileSync(path, "utf8"));
-  return Requirements.parse(raw);      // throws if invalid
-}
-```
-before testing ensure that you have vaalid JSON file wit hthe user requirements specifications 
-Once you build the parser to test quickly:
+### CLI Flow (Optional)
 
 ```bash
-# inside meta-template-builder/
-pnpm ts-node parser/index.ts specs/agents_spec.json
-```
-You should see a colourised, fully-normalised object (with numeric deltas parsed, feature keys canonicalised, timeline values forced to arrays).
-Any structural errors throw immediately with a Zod-powered explanation.
+# 1) Produce a plan from a spec (uses the meta-planner)
+pnpm ts-node src/meta-planner/planner.ts   # or call makeAgentSpecs() from a script
 
----
-
-### 2 ️⃣ Meta-Planner (./meta-planner)
-
-Large model + few-shot examples → Routine plan.json.
-
-```ts
-// meta-planner/planner.ts
-import { openai } from "../utils/llm";
-import { parseSpec } from "../parser";
-
-export async function makePlan(specPath: string) {
-  const spec = parseSpec(specPath);
-  const { content } = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: JSON.stringify(spec) }
-    ],
-    functions: [routineSchemaFunction]  // JSON mode
-  });
-  fs.writeFileSync("plan.json", content);
-  return content;
-}
-```
-SYSTEM_PROMPT gently forces Routine structure & strict JSON.
-
-##### How meta-planner/planner.ts. workks 
-
-It does four things:
-	1.	Load & normalise the raw agents spec JSON.
-	2.	Call an LLM (Horizon β via OpenRouter) to cluster the requirements into
-Routine-style agent buckets.
-	3.	Generate a Routine plan (array of ordered steps).
-	4.	Persist that plan to plan.json so the Mastra Executor can pick it up.
-
-Note – we only build the Planner here.
-The individual tool wrappers (tools/…/*.ts) still execute inside Mastra
-when the plan runs.
-For local testing run pnpm ts-node meta-planner/planner.ts.
-
----
-
-### 3 ️⃣ Template-Builder (./template-builder)
-
-Converts plan.json into a Mastra template directory:
-
-How to run the template builder
-
-```bash
-# 1) Ensure meta-planner/plan.json exists
-pnpm ts-node meta-planner/planner.ts
-
-# 2) Generate a template folder from the plan
-pnpm build:template
-
-# 3) Inspect generated-templates/<name>/
-tree generated-templates/search-bid-guardian
-
-# 4) (Optional) Replace workflow.ts with Mastra’s createWorkflow once you’re ready
-
-```
----
-
-### 4 ️⃣ Tool wrappers (./tools)
-
-Each file exports a Mastra component.
-
-```ts
-// tools/ga4.pull.ts
-export const ga4Pull = defineTool({
-  name: "ga4.pull",
-  inputs: { lookback: z.string(), metrics: z.array(z.string()) },
-  outputs: { roas: z.number() },
-  handler: async ({ lookback, metrics }) => {
-    const res = await ga4Api.query({ lookback, metrics });
-    return { roas: res.roas };
-  }
-});
-
-//Add to a registry in nodes.ts:
-
-export const Components = {
-  ga4Pull,
-  // …
-};
-```
----
-
-### 5 ️⃣ CLI helpers (./cli)
-
-```ts
-// cli/meta-build.ts
-import { makePlan } from "../meta-planner/planner";
-import { buildTemplate } from "../template-builder";
-
-const spec = process.argv[2];
-const plan = await makePlan(spec);
-await buildTemplate(plan);
-console.log("✅ Template ready in ./templates/");
-
-pnpm meta-dev <templateDir> simply runs mastra dev inside that folder.
-```
----
-
-### 🔒 Critics Library
-
-Placed in template-builder/critics and auto-attached via workflow.useMiddleware.
-
-```ts
-export const budgetGuard = (ctx) => {
-  if (ctx.deltaBidPct && Math.abs(ctx.deltaBidPct) > 25) {
-    throw new Error("Bid change >25% not allowed.");
-  }
-};
+# 2) Scaffold a template from an existing plan
+pnpm ts-node src/template-builder/run.ts   # builds into ./.runs/<id>/generated-templates
 ```
 
----
+The API route (`app/api/generate/route.ts`) performs parse → plan → scaffold in one POST.
 
-## 🧪 Unit Tests
-```bash
-pnpm test       # Vitest – validates schema & plan round-trip
+## Environment
+
+Copy `.env.example` to `.env` and fill what you have. For demos you can set:
+
+```env
+DEMO_MODE=true
+DEMO_SEED=42
+DEMO_LATENCY_MS=250
 ```
----
-## 🔩 Architecture (Next.js App Router on Vercel)
 
-```bash
-/app
-  /page.tsx                 ← UI: upload JSON, set variables, Generate button, results browser
-  /api/generate/route.ts    ← POST: orchestrates parse → plan → scaffold, returns runId + tree
-  /api/runs/[id]/tree/route.ts  ← GET: returns file tree for that run
-  /api/runs/[id]/file/route.ts  ← GET: streams a single file
-  /api/runs/[id]/zip/route.ts   ← GET: zips & streams whole run
+Real integrations use the usual keys (GA4, DV360, Google Ads, Meta, AMC, BigQuery). The tools are credential-lazy: if a required var is missing, the tool throws a helpful error in real mode and auto-falls back to fixtures in demo mode.
 
-/src
-  /parser/...               ← your existing parser code (exported as lib functions)
-  /meta-planner/...         ← your planner + prompt (export functions, no top-level side effects)
-  /template-builder/...     ← your scaffolder (export buildFromPlan)
-  /utils/fsTree.ts          ← helper to read dir → JSON tree
-  /utils/zip.ts             ← helper to zip a dir
+## Demo Mode & Fixtures
+
+Every tool that hits an external API follows the pattern:
+
+```typescript
+return withDemo(
+  () => realCall(input),
+  () => fakeFromFixtureOrSynth(input)
+);
 ```
+
+- Fixtures live under `src/fixtures/<tool-id>/*.json` and are loaded with `loadFixture(id, variant)`.
+- Add as many variants as you like (e.g., `low_impressions.json`, `healthy.json`).
+- Tools that support fixtures will prefer fixtures and otherwise synthesize realistic values.
+
+### Example Directory
+
+```
+src/fixtures/
+  dv360.fetchStats/
+    low_impressions.json
+    healthy.json
+  meta.pullAdsetMetrics/
+    fatigues.json
+    healthy.json
+  ga4.pull/
+    roas_day.json
+```
+
+## Template Builder Outputs
+
+Given a `plan.json`, the scaffolder writes a minimal, framework-agnostic runtime:
+
+- `plan.json` – Routine plan used by the runner
+- `nodes.ts` – step descriptors (id, tool, inputs, condition)
+- `workflow.ts` – tiny executor that resolves $ references and invokes bound tools
+- `critics.ts` – emitted critic rules (if any were in the planner output)
+- `observer.ts` – emitted observer spec/hooks (if present)
+- `register.ts` – stub for future mastra deploy
+- `README.md` – per-template doc
+
+You can later replace `workflow.ts` with a Mastra `createWorkflow` implementation without changing the plan.
+
+## Adding a New Tool
+
+1. Create the tool under `src/tools/*.ts` with input/output Zod schemas and the `withDemo` wrapper.
+2. Export it from your tools barrel (or ensure the file path is used by the registry).
+3. Add an entry to `src/template-builder/registry.ts`:
+
+```typescript
+"myTool.id": {
+  id: "myTool.id",
+  importName: "myToolFn",
+  importPath: "../../src/tools",
+  invoke: (inputs) => `await myToolFn.execute({ context: ${inputs} })`,
+},
+```
+
+4. Reference the tool ID in your specs; the planner can include it in steps.
+
+## Critics & Observer
+
+- **Critics**: the meta-planner can output guard-rail rules. The scaffolder renders them into `critics.ts`. The generated workflow calls these rules before committing side effects (e.g., a bid change > 25% throws).
+- **Observer**: planner can also emit an observer spec (events/sinks). The scaffolder writes `observer.ts` and the runner publishes events like `plan_started`, `step_finished`, `tool_result`.
+
+Both are no-ops in demo mode but keep the same interface, so you can switch to real sinks (OTLP/Langfuse/Webhooks) later.
+
+## Troubleshooting
+
+- **Type mismatch between planner and builder** – ensure you import shared types from `src/types/*` and use the `meta-planner/index.ts` barrel. We unify types here to avoid duplicate `PlannerOutput` shapes.
+- **Tool errors in demo** – check `DEMO_MODE=true` and that a fixture exists under `src/fixtures/<tool-id>/`. Tools synthesize values if no fixture is found.
+- **Real mode credential errors** – messages will name the exact env var(s) missing.
+
+## License
+
+MIT (or your team default).
