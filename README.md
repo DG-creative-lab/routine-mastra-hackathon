@@ -69,7 +69,7 @@ routine-mastra-hackathon/
 
 ---
 
-## Concepts (Routine‑style)
+## Concepts (Routine-style) · [Deep dive →](https://ai-news-hub.performics-labs.com/analysis/routine-agentic-marketing-framework)
 
 * **Planner** – converts a normalized spec into an ordered **Routine plan** (steps).
 * **Executor** – generated workflow that calls bound tools with typed inputs.

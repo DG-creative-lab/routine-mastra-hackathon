@@ -1,39 +1,42 @@
 import type { Config } from "tailwindcss";
+import animate from "tailwindcss-animate"; // ESM import (no require)
 
-export default {
-  content: [
-    "./app/**/*.{ts,tsx}",
-    "./components/**/*.{ts,tsx}",
-    "./src/**/*.{ts,tsx}",
-  ],
+const config: Config = {
+  darkMode: ["class"],
+  content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        sun:   { 50:"#FFF8E1", 100:"#FFEAB3", 200:"#FFD86E", 300:"#FFC63B", 400:"#FFB300", 500:"#F4A100" },
-        ink:   { 700:"#1f2937", 800:"#111827", 900:"#0b0f19" },
-        leaf:  { 400:"#33D78F" },
-        sky:   { 400:"#38bdf8", 500:"#0ea5e9" }
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        primary: { DEFAULT: "hsl(var(--primary))", foreground: "hsl(var(--primary-foreground))" },
+        secondary: { DEFAULT: "hsl(var(--secondary))", foreground: "hsl(var(--secondary-foreground))" },
+        destructive: { DEFAULT: "hsl(var(--destructive))", foreground: "hsl(var(--destructive-foreground))" },
+        muted: { DEFAULT: "hsl(var(--muted))", foreground: "hsl(var(--muted-foreground))" },
+        accent: { DEFAULT: "hsl(var(--accent))", foreground: "hsl(var(--accent-foreground))" },
+        card: { DEFAULT: "hsl(var(--card))", foreground: "hsl(var(--card-foreground))" },
       },
-      fontFamily: {
-        display: ["Poppins", "ui-sans-serif", "system-ui"],
-        sans: ["Inter", "ui-sans-serif", "system-ui"],
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
+        "2xl": "1rem",
       },
-      boxShadow: {
-        soft: "0 10px 40px rgba(17,24,39,0.08)",
-      },
+      boxShadow: { soft: "0 10px 40px rgba(17,24,39,0.08)" },
       keyframes: {
-        float: { "0%,100%": { transform:"translateY(0)" }, "50%": { transform:"translateY(-6px)" } },
-        wave:  { "0%": { transform:"rotate(0deg)" }, "50%": { transform:"rotate(8deg)" }, "100%": { transform:"rotate(0deg)" } },
-        blob:  { "0%": { borderRadius:"60% 40% 55% 45%/45% 55% 45% 55%" },
-                 "50%":{ borderRadius:"40% 60% 45% 55%/60% 40% 60% 40%" },
-                 "100%":{borderRadius:"60% 40% 55% 45%/45% 55% 45% 55%"} }
+        "accordion-down": { from: { height: "0" }, to: { height: "var(--radix-accordion-content-height)" } },
+        "accordion-up": { from: { height: "var(--radix-accordion-content-height)" }, to: { height: "0" } },
       },
       animation: {
-        float: "float 5s ease-in-out infinite",
-        wave: "wave 2.2s ease-in-out infinite",
-        blob: "blob 12s ease-in-out infinite",
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out",
       },
     },
   },
-  plugins: [],
-} satisfies Config;
+  plugins: [animate],
+};
+
+export default config;

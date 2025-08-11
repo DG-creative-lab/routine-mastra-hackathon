@@ -1,92 +1,65 @@
-// tsconfig.json
 {
   "compilerOptions": {
-    /* ——— Output & Modules ——— */
+    /* Output & Modules */
     "target": "ES2020",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "rootDir": ".", // allow imports from /src and /app
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "rootDir": ".",
     "outDir": "dist",
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "sourceMap": true,
     "inlineSources": true,
-    /* ——— Strictness ——— */
+
+    /* Strictness */
     "strict": true,
     "noImplicitAny": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "skipLibCheck": true,
-    /* ——— Path Aliases ——— */
+
+    /* Path Aliases */
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "src/*"
-      ],
-      /* bare-folder imports */
-      "@/parser": [
-        "src/parser/index.ts"
-      ],
-      "@/meta-planner": [
-        "src/meta-planner/index.ts"
-      ],
-      "@/template-builder": [
-        "src/template-builder/index.ts"
-      ],
-      "@/tools": [
-        "src/tools/index.ts"
-      ],
-      "@/utils": [
-        "src/utils/index.ts"
-      ],
-      /* wildcard imports */
-      "@/parser/*": [
-        "src/parser/*"
-      ],
-      "@/meta-planner/*": [
-        "src/meta-planner/*"
-      ],
-      "@/template-builder/*": [
-        "src/template-builder/*"
-      ],
-      "@/tools/*": [
-        "src/tools/*"
-      ],
-      "@/components/*": [
-        "app/components/*"
-      ],
-      "@/utils/*": [
-        "src/utils/*"
-      ]
+      "@/*": ["./*"],
+
+      // Frontend (root)
+      "@/components/*": ["components/*"],
+      "@/lib/*": ["lib/*"],
+
+      // Backend (src) — specific aliases win over wildcard
+      "@/parser": ["src/parser/index.ts"],
+      "@/meta-planner": ["src/meta-planner/index.ts"],
+      "@/template-builder": ["src/template-builder/index.ts"],
+      "@/tools": ["src/tools/index.ts"],
+      "@/utils": ["src/utils/index.ts"],
+      "@/parser/*": ["src/parser/*"],
+      "@/meta-planner/*": ["src/meta-planner/*"],
+      "@/template-builder/*": ["src/template-builder/*"],
+      "@/tools/*": ["src/tools/*"],
+      "@/utils/*": ["src/utils/*"]
     },
-    /* ——— Runtime Types & Libs ——— */
-    "types": [
-      "node"
-    ],
-    "lib": [
-      "ES2020"
-    ],
+
+    /* Runtime Types & Libs */
+    "types": ["node"],
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "allowJs": true,
     "noEmit": true,
     "incremental": true,
     "isolatedModules": true,
     "jsx": "preserve",
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ]
+    "plugins": [{ "name": "next" }]
   },
   "include": [
-    "*.ts", // your service code
-    "app/**/*", // Next.js routes / components
-    "src/**/*" // root scripts if any
-    ,
-    ".next/types/**/*.ts"
+    "app/**/*",
+    "components/**/*",
+    "lib/**/*",
+    "src/**/*",
+    ".next/types/**/*.ts",
+    "postcss.config.js",
+    "next-env.d.ts"
   ],
-  "exclude": [
-    "dist",
-    "node_modules",
-    "generated-templates"
-  ]
+  "exclude": ["dist", "node_modules", "generated-templates"]
 }
+
+
