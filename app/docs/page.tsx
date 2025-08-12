@@ -23,10 +23,10 @@ export default function DocsPage() {
     <div className="mx-auto max-w-6xl px-4 py-10 md:py-14 space-y-12">
       {/* Hero */}
       <section className={card()}>
-        <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
+        <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-zinc-900 dark:text-white">
           Using the <span className="text-emerald-300">Meta Template Builder</span>
         </h1>
-        <p className="text-zinc-300 text-lg mt-2 max-w-3xl">
+        <p className="text-lg mt-2 max-w-3xl text-zinc-700 dark:text-zinc-300">
           Turn a plain-English description into a runnable{" "}
           <span className="text-emerald-300">Mastra</span> template using{" "}
           <span className="text-emerald-300">Routine-style</span> planning. This guide covers the
@@ -51,12 +51,12 @@ export default function DocsPage() {
 
       {/* Quickstart */}
       <section className={card()}>
-        <h2 className="text-xl font-semibold mb-5">Quickstart</h2>
+        <h2 className="text-xl font-semibold mb-5 text-zinc-900 dark:text-white">Quickstart</h2>
         <div className="grid md:grid-cols-3 gap-4">
           <Step
             icon={<Search className="h-5 w-5" />}
             title="1) Describe"
-            body="Type what you want to automate (e.g., “Lower bids 20% when ROAS < 3”). Optionally tick channels (Search, DV360, Meta, AMC)."
+            body='Type what you want to automate (e.g., “Lower bids 20% when ROAS < 3”). Optionally tick channels (Search, DV360, Meta, AMC).'
           />
           <Step
             icon={<Puzzle className="h-5 w-5" />}
@@ -96,15 +96,15 @@ export default function DocsPage() {
 
       {/* Sample prompt */}
       <section className={card()}>
-        <h2 className="text-xl font-semibold mb-3">Sample prompt</h2>
-        <p className="text-zinc-300 mb-3">
+        <h2 className="text-xl font-semibold mb-3 text-zinc-900 dark:text-white">Sample prompt</h2>
+        <p className="mb-3 text-zinc-700 dark:text-zinc-300">
           Paste this into <em>Describe task</em> to see an end-to-end plan:
         </p>
         <pre className={pre()}>
 {`Lower Google Ads bids by 20% for campaigns where yesterday's ROAS < 3.
 Pull GA4 metrics, compare to threshold, then patch bids. Log changes.`}
         </pre>
-        <p className="text-xs text-zinc-400 mt-2">
+        <p className="text-xs mt-2 text-zinc-600 dark:text-zinc-400">
           You can add tool hints like <code>Use tool: ga4Pull</code>,{" "}
           <code>Use tool: computeCheck</code>, or <code>Use tool: gAdsUpdateBid</code>—the planner
           will adapt.
@@ -113,7 +113,9 @@ Pull GA4 metrics, compare to threshold, then patch bids. Log changes.`}
 
       {/* Outputs */}
       <section className={card()}>
-        <h2 className="text-xl font-semibold mb-5">What the builder generates</h2>
+        <h2 className="text-xl font-semibold mb-5 text-zinc-900 dark:text-white">
+          What the builder generates
+        </h2>
         <div className="grid md:grid-cols-2 gap-4">
           <OutputFile
             name="plan.json"
@@ -144,7 +146,7 @@ Pull GA4 metrics, compare to threshold, then patch bids. Log changes.`}
 
       {/* Upload flow */}
       <section className={card()}>
-        <h2 className="text-xl font-semibold mb-3">Upload spec flow</h2>
+        <h2 className="text-xl font-semibold mb-3 text-zinc-900 dark:text-white">Upload spec flow</h2>
         <div className="grid md:grid-cols-3 gap-4">
           <Mini
             icon={<FileUp className="h-4 w-4" />}
@@ -168,27 +170,28 @@ Pull GA4 metrics, compare to threshold, then patch bids. Log changes.`}
 
       {/* Troubleshooting */}
       <section className={card()}>
-        <h2 className="text-xl font-semibold mb-4">Troubleshooting</h2>
-        <ul className="space-y-3 text-zinc-300">
+        <h2 className="text-xl font-semibold mb-4 text-zinc-900 dark:text-white">Troubleshooting</h2>
+        <ul className="space-y-3 text-zinc-700 dark:text-zinc-300">
           <li className="flex gap-2">
             <HelpCircle className="h-5 w-5 text-emerald-300 shrink-0 mt-0.5" />
             <div>
-              <span className="text-white font-medium">No tools visible?</span> Clear the search
-              box, or click a channel chip (Search, DV360, Meta, AMC) to filter quickly.
+              <span className="font-medium text-zinc-900 dark:text-white">No tools visible?</span>{" "}
+              Clear the search box, or click a channel chip (Search, DV360, Meta, AMC) to filter
+              quickly.
             </div>
           </li>
           <li className="flex gap-2">
             <HelpCircle className="h-5 w-5 text-emerald-300 shrink-0 mt-0.5" />
             <div>
-              <span className="text-white font-medium">Rate-limited?</span> Try again in a minute.
-              If it persists, shorten the prompt or remove extra examples.
+              <span className="font-medium text-zinc-900 dark:text-white">Rate-limited?</span> Try
+              again in a minute. If it persists, shorten the prompt or remove extra examples.
             </div>
           </li>
           <li className="flex gap-2">
             <HelpCircle className="h-5 w-5 text-emerald-300 shrink-0 mt-0.5" />
             <div>
-              <span className="text-white font-medium">Dark/light theme?</span> Use the toggle in
-              the top bar. The UI uses system fonts and Tailwind utilities.
+              <span className="font-medium text-zinc-900 dark:text-white">Dark/light theme?</span>{" "}
+              Use the toggle in the top bar. The UI uses system fonts and Tailwind utilities.
             </div>
           </li>
         </ul>
@@ -241,9 +244,9 @@ function Step({
     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
       <div className="flex items-center gap-2 text-emerald-300">
         {icon}
-        <div className="font-medium text-white">{title}</div>
+        <div className="font-medium text-zinc-900 dark:text-white">{title}</div>
       </div>
-      <p className="text-sm text-zinc-300 mt-2">{body}</p>
+      <p className="text-sm mt-2 text-zinc-700 dark:text-zinc-300">{body}</p>
     </div>
   );
 }
@@ -251,8 +254,8 @@ function Step({
 function OutputFile({ name, desc }: { name: string; desc: string }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-      <div className="font-mono text-sm text-white">{name}</div>
-      <p className="text-sm text-zinc-300 mt-1">{desc}</p>
+      <div className="font-mono text-sm text-zinc-900 dark:text-white">{name}</div>
+      <p className="text-sm mt-1 text-zinc-700 dark:text-zinc-300">{desc}</p>
     </div>
   );
 }
@@ -270,9 +273,9 @@ function Mini({
     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
       <div className="flex items-center gap-2 text-emerald-300">
         {icon}
-        <div className="font-medium text-white">{title}</div>
+        <div className="font-medium text-zinc-900 dark:text-white">{title}</div>
       </div>
-      <p className="text-sm text-zinc-300 mt-2 whitespace-pre-line">{body}</p>
+      <p className="text-sm mt-2 whitespace-pre-line text-zinc-700 dark:text-zinc-300">{body}</p>
     </div>
   );
 }

@@ -19,14 +19,14 @@ export default function AboutPage() {
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/30 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-300">
               Performics Labs — R&D
             </div>
-            <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">
+            <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-zinc-900 dark:text-white">
               About the <span className="text-emerald-300">Meta Template Builder</span>
             </h1>
-            <p className="text-zinc-300 text-lg max-w-3xl">
+            <p className="text-lg max-w-3xl text-zinc-700 dark:text-zinc-300">
               A hackathon project that turns plain-English specs into runnable{" "}
               <em className="text-emerald-300 not-italic">Mastra</em> templates using{" "}
-              <span className="text-emerald-300">Routine-style</span> planning. It’s our
-              pragmatic path to collaborative, auditable agents for real marketing work.
+              <span className="text-emerald-300">Routine-style</span> planning. It’s our pragmatic
+              path to collaborative, auditable agents for real marketing work.
             </p>
           </div>
         </div>
@@ -35,23 +35,29 @@ export default function AboutPage() {
       {/* The Idea */}
       <section className="grid lg:grid-cols-2 gap-6">
         <div className={card()}>
-          <h2 className="text-xl font-semibold mb-2">Why merge Routine with Mastra?</h2>
-          <ul className="space-y-3 text-zinc-300">
+          <h2 className="text-xl font-semibold mb-2 text-zinc-900 dark:text-white">
+            Why merge Routine with Mastra?
+          </h2>
+          <ul className="space-y-3 text-zinc-700 dark:text-zinc-300">
             <li>
-              <span className="font-medium text-white">Structured plans → real code.</span>{" "}
+              <span className="font-medium text-zinc-900 dark:text-white">
+                Structured plans → real code.
+              </span>{" "}
               Routine gives us JSON steps; Mastra gives us an ergonomic runtime and tool layer.
             </li>
             <li>
-              <span className="font-medium text-white">Bias for shipping.</span> You describe a
-              task; we scaffold a working template: <code>plan.json</code>,{" "}
+              <span className="font-medium text-zinc-900 dark:text-white">Bias for shipping.</span>{" "}
+              You describe a task; we scaffold a working template: <code>plan.json</code>,{" "}
               <code>agents.json</code>, <code>workflow.ts</code>, and stubs.
             </li>
             <li>
-              <span className="font-medium text-white">Audit & guardrails ready.</span> Plans are
-              explicit; critics and observers plug in cleanly.
+              <span className="font-medium text-zinc-900 dark:text-white">
+                Audit & guardrails ready.
+              </span>{" "}
+              Plans are explicit; critics and observers plug in cleanly.
             </li>
           </ul>
-          <p className="mt-4 text-sm text-zinc-400">
+          <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
             We’re keeping the builder simple and the outputs opinionated—so teams can iterate in
             hours, not weeks.
           </p>
@@ -61,10 +67,10 @@ export default function AboutPage() {
         <div className={card()}>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold mb-2 flex items-center gap-2">
+              <h2 className="text-xl font-semibold mb-2 flex items-center gap-2 text-zinc-900 dark:text-white">
                 <Users2 className="h-5 w-5" /> The team
               </h2>
-              <p className="text-zinc-300">
+              <p className="text-zinc-700 dark:text-zinc-300">
                 We’re a small group of engineers, data scientists and media strategists inside{" "}
                 <span className="text-emerald-300 font-medium">Performics Labs</span>—an
                 experimentation unit focused on applied AI for marketing.
@@ -73,7 +79,7 @@ export default function AboutPage() {
                 {["Engineering", "Data Science", "Media Strategy", "Design"].map((tag) => (
                   <span
                     key={tag}
-                    className="px-2.5 py-1 rounded-full text-xs border border-white/10 bg-white/5 text-zinc-200"
+                    className="px-2.5 py-1 rounded-full text-xs border border-white/10 bg-white/5 text-zinc-700 dark:text-zinc-200"
                   >
                     {tag}
                   </span>
@@ -93,7 +99,7 @@ export default function AboutPage() {
 
       {/* How it fits / at a glance */}
       <section className={card()}>
-        <h2 className="text-xl font-semibold mb-5">At a glance</h2>
+        <h2 className="text-xl font-semibold mb-5 text-zinc-900 dark:text-white">At a glance</h2>
         <div className="grid md:grid-cols-3 gap-4">
           <Feature
             icon={<Workflow className="h-5 w-5" />}
@@ -115,19 +121,19 @@ export default function AboutPage() {
 
       {/* Roadmap */}
       <section className={card()}>
-        <h2 className="text-xl font-semibold mb-2">What’s next</h2>
+        <h2 className="text-xl font-semibold mb-2 text-zinc-900 dark:text-white">What’s next</h2>
         <div className="grid md:grid-cols-2 gap-3 mt-3">
           {ROADMAP.map((r) => (
             <div
               key={r.title}
               className="rounded-xl border border-white/10 bg-white/5 p-4 hover:border-emerald-300/40 transition"
             >
-              <h3 className="font-medium">{r.title}</h3>
-              <p className="text-zinc-300 text-sm mt-1">{r.body}</p>
+              <h3 className="font-medium text-zinc-900 dark:text-white">{r.title}</h3>
+              <p className="text-sm mt-1 text-zinc-700 dark:text-zinc-300">{r.body}</p>
             </div>
           ))}
         </div>
-        <p className="text-xs text-zinc-400 mt-4">
+        <p className="text-xs mt-4 text-zinc-600 dark:text-zinc-400">
           Full vision: mailboxed agents on a message bus, shared blackboard state, critics as
           first-class citizens, and a clean audit log that doubles as a training set for
           bandits/offline RL.
@@ -144,12 +150,14 @@ export default function AboutPage() {
         </Link>
         <Link
           href="/docs"
-          className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-zinc-200 hover:bg-white/7 transition"
+          className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-zinc-700 dark:text-zinc-200 hover:bg-white/7 transition"
         >
           <BookOpen className="h-4 w-4" />
           Read the Docs
         </Link>
-        <span className="text-sm text-zinc-400">— quickstart, file formats, and examples</span>
+        <span className="text-sm text-zinc-600 dark:text-zinc-400">
+          — quickstart, file formats, and examples
+        </span>
       </section>
     </div>
   );
@@ -177,9 +185,9 @@ function Feature({
     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
       <div className="flex items-center gap-2 text-emerald-300">
         {icon}
-        <div className="font-medium text-white">{title}</div>
+        <div className="font-medium text-zinc-900 dark:text-white">{title}</div>
       </div>
-      <p className="text-sm text-zinc-300 mt-2">{body}</p>
+      <p className="text-sm mt-2 text-zinc-700 dark:text-zinc-300">{body}</p>
     </div>
   );
 }
