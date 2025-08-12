@@ -10,6 +10,7 @@ import { useTheme } from "next-themes";
 const NAV = [
   { href: "/", label: "Builder" },
   { href: "/about", label: "About" },   // docs/how-to
+  { href: "/docs", label: "Docs" },   // docs/how-to
 ];
 
 export default function AppHeader({
