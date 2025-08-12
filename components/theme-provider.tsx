@@ -7,7 +7,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   return (
     <NextThemesProvider
       attribute="class"
-      defaultTheme="light"   // ← start in dark
+      defaultTheme="dark"   // ← start in dark
       enableSystem={false} // set true if you want system auto
     >
       {children}
