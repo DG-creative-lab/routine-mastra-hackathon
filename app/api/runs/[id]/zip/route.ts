@@ -6,13 +6,16 @@ import { zipDirToStream } from '@/utils';
 
 export const runtime = 'nodejs';
 
-type Ctx = { params: { id: string } };
+interface RouteParams {
+  params: {
+    id: string;
+  };
+}
 
-export async function GET(_request: Request, context: Ctx) {
-  const { id } = context.params;
-
+export async function GET(_request: Request, { params }: RouteParams) {
+  const { id } = params;
   const dir = path.resolve(getRunsDir(), id, 'generated-templates');
-
+  
   let nodeZipStream: import('node:stream').Readable;
   try {
     nodeZipStream = zipDirToStream(dir); // your util returns a Node Readable
@@ -23,9 +26,8 @@ export async function GET(_request: Request, context: Ctx) {
       { status: 500 }
     );
   }
-
+  
   const webStream = Readable.toWeb(nodeZipStream) as unknown as ReadableStream;
-
   return new Response(webStream, {
     headers: {
       'content-type': 'application/zip',
