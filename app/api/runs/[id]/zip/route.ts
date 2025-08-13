@@ -1,37 +1,41 @@
-import { NextResponse } from 'next/server';
-import { Readable } from 'node:stream';
-import path from 'node:path';
-import { getRunsDir } from '@/utils';
-import { zipDirToStream } from '@/utils';
+import { NextResponse } from "next/server";
+import path from "node:path";
+import { getRunsDir } from "@/utils";
+// re-use your existing util that returns a Node Readable
+import { zipDirToStream } from "@/utils/zip";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
-interface RouteParams {
-  params: {
-    id: string;
-  };
-}
+export async function GET(_req: Request, context: any) {
+  const { id } = (context?.params ?? {}) as { id?: string };
+  if (!id) {
+    return NextResponse.json({ error: "Missing run id" }, { status: 400 });
+  }
 
-export async function GET(_request: Request, { params }: RouteParams) {
-  const { id } = params;
-  const dir = path.resolve(getRunsDir(), id, 'generated-templates');
-  
-  let nodeZipStream: import('node:stream').Readable;
+  const dir = path.resolve(getRunsDir(), id, "generated-templates");
+
+  let nodeStream: NodeJS.ReadableStream;
   try {
-    nodeZipStream = zipDirToStream(dir); // your util returns a Node Readable
+    nodeStream = zipDirToStream(dir); // your existing helper
   } catch (err: any) {
     console.error(err);
     return NextResponse.json(
-      { error: err?.message ?? 'Failed to create ZIP' },
+      { error: err?.message ?? "Failed to create ZIP" },
       { status: 500 }
     );
   }
-  
-  const webStream = Readable.toWeb(nodeZipStream) as unknown as ReadableStream;
-  return new Response(webStream, {
+
+  // Consume the Node stream fully into a Buffer (still no streaming in the response)
+  const chunks: Buffer[] = [];
+  for await (const chunk of nodeStream as any) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  const buf = Buffer.concat(chunks);
+
+  return new Response(buf, {
     headers: {
-      'content-type': 'application/zip',
-      'content-disposition': `attachment; filename="${id}.zip"`,
+      "content-type": "application/zip",
+      "content-disposition": `attachment; filename="${id}.zip"`,
     },
   });
 }
