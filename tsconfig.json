@@ -60,7 +60,7 @@
     ".next/types/**/*.ts",
     "postcss.config.js",
     "next-env.d.ts"
-  ],
+, "next.config.js"  ],
   "exclude": ["dist", "node_modules", "generated-templates"]
 }
 

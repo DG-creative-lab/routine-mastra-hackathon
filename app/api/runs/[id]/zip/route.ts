@@ -1,34 +1,35 @@
-import path from "node:path";
-import { Readable as NodeReadable } from "node:stream";
-import { zipDirToStream } from "@/utils";
-import { getRunsDir } from "@/utils";
+import { NextResponse } from 'next/server';
+import { Readable } from 'node:stream';
+import path from 'node:path';
+import { getRunsDir } from '@/utils';
+import { zipDirToStream } from '@/utils';
 
-export const runtime = "nodejs";
+export const runtime = 'nodejs';
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { id: string } }
-) {
-  const runId = params.id;
-  const runDir = path.join(getRunsDir(), runId, "generated-templates");
+type Ctx = { params: { id: string } };
 
-  let nodeZipStream: import("node:stream").Readable;
+export async function GET(_request: Request, context: Ctx) {
+  const { id } = context.params;
+
+  const dir = path.resolve(getRunsDir(), id, 'generated-templates');
+
+  let nodeZipStream: import('node:stream').Readable;
   try {
-    nodeZipStream = zipDirToStream(runDir); // returns a Node Readable
+    nodeZipStream = zipDirToStream(dir); // your util returns a Node Readable
   } catch (err: any) {
     console.error(err);
-    return Response.json(
-      { error: err?.message ?? "Failed to create ZIP" },
+    return NextResponse.json(
+      { error: err?.message ?? 'Failed to create ZIP' },
       { status: 500 }
     );
   }
 
-  const webStream = NodeReadable.toWeb(nodeZipStream) as unknown as ReadableStream;
+  const webStream = Readable.toWeb(nodeZipStream) as unknown as ReadableStream;
 
   return new Response(webStream, {
     headers: {
-      "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${runId}.zip"`,
+      'content-type': 'application/zip',
+      'content-disposition': `attachment; filename="${id}.zip"`,
     },
   });
 }
