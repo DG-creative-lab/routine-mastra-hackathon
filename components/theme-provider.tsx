@@ -3,12 +3,27 @@
 import * as React from "react";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+type Props = {
+  children: React.ReactNode;
+  attribute?: "class" | "data-theme";
+  defaultTheme?: string;
+  enableSystem?: boolean;
+  disableTransitionOnChange?: boolean;
+};
+
+export default function ThemeProvider({
+  children,
+  attribute = "class",
+  defaultTheme = "dark",
+  enableSystem = false,
+  disableTransitionOnChange = true,
+}: Props) {
   return (
     <NextThemesProvider
-      attribute="class"
-      defaultTheme="light"   // ← start in dark
-      enableSystem={false} // set true if you want system auto
+      attribute={attribute}
+      defaultTheme={defaultTheme}
+      enableSystem={enableSystem}
+      disableTransitionOnChange={disableTransitionOnChange}
     >
       {children}
     </NextThemesProvider>
