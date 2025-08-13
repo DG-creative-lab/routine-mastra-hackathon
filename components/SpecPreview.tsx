@@ -1,120 +1,83 @@
 "use client";
 
-import { useState } from "react";
-import { validateSpec, postGenerateReuse } from "@/lib/api";
-import type { AgentSpecFile } from "@/lib/types";
+import { useMemo, useState } from "react";
+import type { FsNode } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Clipboard, Download, ShieldCheck, PlayCircle } from "lucide-react";
 import { toast } from "sonner";
+import { putArtifacts } from "@/lib/artifacts-cache";
+import { postGenerateReuse } from "@/lib/api"; // ✅ correct import
 
 type Props = {
   runId?: string;
-  spec?: AgentSpecFile | unknown;
-  onGenerated: (res: { runId: string; tree: any }) => void;
+  spec?: unknown;
+  onGenerated?: (res: { runId: string; tree: FsNode }) => void;
   className?: string;
 };
 
 export default function SpecPreview({ runId, spec, onGenerated, className }: Props) {
-  const [validating, setValidating] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  async function onValidate() {
-    if (!spec) return;
-    setValidating(true);
+  const pretty = useMemo(() => {
+    if (!spec) return "";
     try {
-      const res = await validateSpec({ object: spec });
-      if ("ok" in res && res.ok) {
-        toast.success("Spec is valid");
-      } else {
-        toast.error("Spec invalid", { description: (res as any).error });
-      }
-    } catch (e) {
-      toast.error("Validation error", { description: String(e) });
-    } finally {
-      setValidating(false);
+      return JSON.stringify(spec, null, 2);
+    } catch {
+      return String(spec);
     }
-  }
+  }, [spec]);
 
-  async function onGenerate() {
-    if (!runId) {
-      toast.error("No run to generate");
+  async function handleGenerate() {
+    if (!runId || !spec) {
+      toast.error("Nothing to generate yet", {
+        description: "Create a spec first in the Describe task card.",
+      });
       return;
     }
     setGenerating(true);
     try {
+      // Your API expects just the runId to reuse the already-specified spec.
+      // It returns at least { runId, tree }; some builds also include { files }.
       const res = await postGenerateReuse({ runId });
-      toast.success("Template ready • download or explore files");
-      onGenerated(res);
-    } catch (e) {
-      toast.error("Generate failed", { description: String(e) });
+
+      // If your backend returns inlined files, stash them for instant preview.
+      // Safe no-op if res.files is undefined.
+      // @ts-expect-error — tolerate optional files in different backends
+      if (res?.files) putArtifacts(res.runId, { tree: res.tree as FsNode, files: res.files });
+
+      onGenerated?.({ runId: res.runId, tree: res.tree as FsNode });
+      toast.success("Templates generated");
+    } catch (e: any) {
+      toast.error("Generation failed", { description: String(e?.message ?? e) });
     } finally {
       setGenerating(false);
     }
   }
 
-  function copyJSON() {
-    if (!spec) return;
-    navigator.clipboard.writeText(JSON.stringify(spec, null, 2));
-    toast.success("Spec copied to clipboard");
-  }
-
-  function downloadJSON() {
-    if (!spec) return;
-    const blob = new Blob([JSON.stringify(spec, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "requirements.normalized.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   return (
-    <Card className={`rounded-2xl shadow-sm h-full min-h-[240px] ${className ?? ""}`}>
+    <Card className={`rounded-2xl shadow-sm h-full ${className ?? ""}`}>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Spec preview</CardTitle>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent className="pt-0 space-y-3">
         {!spec ? (
           <div className="text-sm text-muted-foreground">
             No spec yet. Create or upload one to see it here.
           </div>
         ) : (
           <>
-            <div className="rounded-xl border bg-slate-50 p-3 max-h-[320px] overflow-auto text-xs">
-              <pre className="whitespace-pre-wrap">
-                {JSON.stringify(spec, null, 2)}
-              </pre>
+            <div className="rounded-xl border bg-slate-50 p-3 max-h-[420px] overflow-auto">
+              <pre className="text-xs whitespace-pre-wrap">{pretty}</pre>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={copyJSON}>
-                <Clipboard className="h-4 w-4 mr-2" />
-                Copy
+            <Separator />
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs text-slate-500">
+                Run: <span className="font-mono">{runId ?? "—"}</span>
+              </div>
+              <Button onClick={handleGenerate} disabled={generating || !runId || !spec}>
+                {generating ? "Generating…" : "Generate"}
               </Button>
-              <Button variant="secondary" onClick={downloadJSON}>
-                <Download className="h-4 w-4 mr-2" />
-                Download
-              </Button>
-              <Button onClick={onValidate} disabled={validating}>
-                <ShieldCheck className="h-4 w-4 mr-2" />
-                {validating ? "Validating…" : "Validate"}
-              </Button>
-              <Button
-                onClick={onGenerate}
-                disabled={generating || !runId}
-                className="bg-slate-900 text-white hover:bg-slate-800"
-              >
-                <PlayCircle className="h-4 w-4 mr-2" />
-                {generating ? "Generating…" : "Generate Template"}
-              </Button>
-            </div>
-            <Separator className="my-3" />
-            <div className="text-xs text-muted-foreground">
-              Run: <span className="font-mono">{runId ?? "—"}</span>
             </div>
           </>
         )}
@@ -122,4 +85,3 @@ export default function SpecPreview({ runId, spec, onGenerated, className }: Pro
     </Card>
   );
 }
-

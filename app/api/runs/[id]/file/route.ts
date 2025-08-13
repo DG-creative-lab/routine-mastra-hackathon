@@ -1,47 +1,74 @@
-import { NextResponse } from "next/server";
-import { promises as fsp } from "node:fs";
+// app/api/runs/[id]/file/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import path from "node:path";
+import { promises as fs } from "node:fs";
 import { getRunsDir } from "@/utils";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-export async function GET(_req: Request, context: any) {
-  const { id } = (context?.params ?? {}) as { id?: string };
-  if (!id) {
-    return NextResponse.json({ error: "Missing run id" }, { status: 400 });
-  }
+// Treat only these as text-previewable. Everything else returns 415.
+const TEXT_EXT = new Set([
+  ".json", ".md", ".txt",
+  ".ts", ".tsx", ".js", ".jsx",
+  ".css", ".scss", ".sass",
+  ".yml", ".yaml", ".toml",
+  ".graphql", ".gql"
+]);
 
-  const url = new URL(_req.url);
+export async function GET(
+  req: NextRequest, 
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const url = new URL(req.url);
   const relPath = url.searchParams.get("path");
-  if (!relPath) {
-    return NextResponse.json({ error: "Missing `path` query parameter" }, { status: 400 });
+
+  if (!id || !relPath) {
+    return NextResponse.json({ error: "Missing id or path" }, { status: 400 });
   }
 
-  // Normalize / guard
+  // Normalize to avoid directory traversal
   const normalized = path.posix.normalize(relPath);
   if (normalized.startsWith("..") || path.isAbsolute(normalized)) {
-    return NextResponse.json({ error: "Invalid `path` parameter" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid path" }, { status: 400 });
   }
 
-  // Resolve file under .runs/{id}/generated-templates
   const baseDir = path.resolve(getRunsDir(), id, "generated-templates");
   const fullPath = path.join(baseDir, normalized);
 
-  // Read as Buffer (no streaming)
-  let buf: Buffer;
   try {
-    const stat = await fsp.stat(fullPath);
-    if (!stat.isFile()) throw new Error("Not a file");
-    buf = await fsp.readFile(fullPath);
-  } catch {
-    return NextResponse.json({ error: "File not found" }, { status: 404 });
-  }
+    const stat = await fs.stat(fullPath);
+    if (!stat.isFile()) {
+      return NextResponse.json({ error: "Not a file" }, { status: 404 });
+    }
 
-  const filename = path.basename(fullPath);
-  return new Response(buf, {
-    headers: {
-      "content-type": "application/octet-stream",
-      "content-disposition": `attachment; filename="${filename}"`,
-    },
-  });
+    const ext = path.extname(fullPath).toLowerCase();
+    if (!TEXT_EXT.has(ext)) {
+      // Not a text file we preview. Return 415; UI can show a small note.
+      return NextResponse.json(
+        { error: "Unsupported file type for preview.", ext },
+        { status: 415 }
+      );
+    }
+
+    const text = await fs.readFile(fullPath, "utf8");
+    const contentType =
+      ext === ".json"
+        ? "application/json; charset=utf-8"
+        : "text/plain; charset=utf-8";
+
+    return new NextResponse(text, {
+      headers: {
+        "content-type": contentType,
+        "cache-control": "no-store"
+      }
+    });
+  } catch (err: any) {
+    console.error(err);
+    return NextResponse.json(
+      { error: err?.message ?? "Failed to read file" },
+      { status: 500 }
+    );
+  }
 }
