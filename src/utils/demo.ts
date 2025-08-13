@@ -1,6 +1,6 @@
 export const DEMO = String(process.env.DEMO_MODE).toLowerCase() === "true";
 export const DEMO_LATENCY = Number(process.env.DEMO_LATENCY_MS ?? 0);
-const SEED = Number(process.env.DEMO_SEED ?? 1);
+
 
 let seed = Number(process.env.DEMO_SEED ?? 42) | 0;
 export function rand() {

@@ -37,7 +37,9 @@
       "@/meta-planner/*": ["src/meta-planner/*"],
       "@/template-builder/*": ["src/template-builder/*"],
       "@/tools/*": ["src/tools/*"],
-      "@/utils/*": ["src/utils/*"]
+      "@/utils/*": ["src/utils/*"],
+      "@/types/*": ["src/types/*"],
+      "@/fixtures/*": ["src/fixtures/*"]  
     },
 
     /* Runtime Types & Libs */

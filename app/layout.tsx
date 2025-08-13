@@ -1,6 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { ThemeProvider } from "@/components/theme-provider";
+import ThemeProvider from "@/components/theme-provider"; // default import
 import AppHeader from "@/components/AppHeader";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -25,4 +25,3 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
-

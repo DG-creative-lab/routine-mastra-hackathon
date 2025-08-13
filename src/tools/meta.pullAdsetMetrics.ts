@@ -106,7 +106,7 @@ export const metaPullAdsetMetrics = createTool<typeof inputSchema, typeof output
           : data;
 
         return outputSchema.parse(
-          adSetIds.map((id, i) => {
+          adSetIds.map((id) => {
             const m = map[id] ?? null;
             return {
               adSetId: id,
