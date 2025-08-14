@@ -62,3 +62,8 @@ docs/.vitepress/dist/
 
 # Next.js build output
 .next/
+
+# Runtime artifacts
+.runs/
+.run
+*.run
