@@ -5,18 +5,27 @@ build/
 .tmp/
 .cache/
 
-# Compiled TypeScript output
-*.js
-*.js.map
-*.d.ts
-*.cjs
+# If you DO emit JS from /src, ignore the emitted files only in src:
+# (You currently have "noEmit": true, so these are just precautionary.)
+/src/**/*.js
+/src/**/*.js.map
+/src/**/*.d.ts
 
+# Keep config files tracked even if they match patterns above
+!next.config.js
+!postcss.config.cjs
+!tailwind.config.ts
+!eslint.config.*        # .js/.mjs
+!*.config.js
+!*.config.cjs
+!*.config.mjs
+!*.config.ts
 
 # Logs
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
-yarn.lock      
+yarn.lock
 package-lock.json
 
 # Runtime data
@@ -34,7 +43,10 @@ Thumbs.db
 
 # Environment / secrets
 .env*
-!.env.example   # keep template for docs
+!.env.example           # keep template for docs
+
+# Vercel local project settings
+.vercel/
 
 # Mastra CLI artefacts
 .mastracache/
@@ -44,26 +56,21 @@ Thumbs.db
 coverage/
 *.lcov
 
-# Storybook / docs builds
+# Storybook / local docs builds
 storybook-static/
 docs/.vitepress/dist/
 
-# Optional: ignore screenshots or videos unless needed
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.mp4
-!.docs/assets/**     
+# Images: DO NOT ignore globally (so /public works).
+# If you want to ignore large images in docs, scope it:
+# docs/static-raw/**
 
-# scsfold from the planner
-
-./generated-templates/
+# Planner scaffold output
+generated-templates/
 
 # Next.js build output
 .next/
 
-# Runtime artifacts
+# Runtime artifacts from runs
 .runs/
 .run
 *.run
