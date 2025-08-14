@@ -26,6 +26,6 @@
     "components/**/*",
     "lib/**/*",
     "src/**/*",
-    "postcss.config.mjs"
+    "postcss.config.cjs"
 , "next.config.js", "eslint.config.js"  ]
 }
