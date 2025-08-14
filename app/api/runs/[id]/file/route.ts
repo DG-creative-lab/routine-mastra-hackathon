@@ -1,50 +1,44 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createReadStream, promises as fsPromises } from "fs";
-import { Readable } from "node:stream";            // ← add
-import path from "path";
+import { NextResponse } from "next/server";
+import path from "node:path";
+import { promises as fs } from "node:fs";
+import { getRunsDir } from "@/utils";
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  const runId = params.id;
-  const url = req.nextUrl;
-  const relPath = url.searchParams.get("path");
+export const runtime = "nodejs";
 
+export async function GET(req: Request, ctx: any) {
+  // Pull run id from route params (do not annotate ctx to dodge the plugin)
+  const id = ctx?.params?.id as string | undefined;
+  const url = new URL(req.url);
+  const relPath = url.searchParams.get("path") ?? "";
+
+  if (!id) {
+    return NextResponse.json({ error: "Missing run id" }, { status: 400 });
+  }
   if (!relPath) {
-    return NextResponse.json(
-      { error: "Missing `path` query parameter" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Missing `path` query parameter" }, { status: 400 });
   }
 
-  // Prevent directory traversal & absolute paths
+  // prevent directory traversal
   const normalized = path.posix.normalize(relPath);
   if (normalized.startsWith("..") || path.isAbsolute(normalized)) {
     return NextResponse.json({ error: "Invalid `path` parameter" }, { status: 400 });
   }
 
-  // Compute full path under this run
-  const runDir = path.resolve(process.cwd(), ".runs", runId, "generated-templates");
-  const fullPath = path.join(runDir, normalized);
+  // absolute file path
+  const fullPath = path.resolve(getRunsDir(), id, "generated-templates", normalized);
 
-  // Ensure file exists and is a file
+  // read the file as text; if that fails, return a simple JSON saying it's binary
   try {
-    const stat = await fsPromises.stat(fullPath);
-    if (!stat.isFile()) throw new Error("Not a file");
+    const content = await fs.readFile(fullPath, "utf8");
+    // text preview
+    return new Response(content, {
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
   } catch {
-    return NextResponse.json({ error: "File not found" }, { status: 404 });
+    // Fall back for non-text files
+    return NextResponse.json(
+      { error: "Binary or unreadable as text" },
+      { status: 415 } // Unsupported Media Type
+    );
   }
-
-  // Stream the file back as an attachment
-  const fileName = path.basename(fullPath);
-  const nodeStream = createReadStream(fullPath);
-  const webStream = Readable.toWeb(nodeStream) as unknown as ReadableStream; // ← convert
-
-  return new NextResponse(webStream, {
-    headers: {
-      "Content-Disposition": `attachment; filename="${fileName}"`,
-      "Content-Type": "application/octet-stream",
-    },
-  });
 }
