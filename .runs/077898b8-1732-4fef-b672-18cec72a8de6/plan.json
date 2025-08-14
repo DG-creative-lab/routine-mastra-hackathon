@@ -1,0 +1,14 @@
+[
+  {
+    "tool": "amc.createlookalike",
+    "inputs": {
+      "seed_audience": "$seed_audience_id",
+      "lookalike_size": 1
+    },
+    "outputs": [
+      "lookalike_audience_id"
+    ],
+    "id": 1,
+    "agent": "amc_lookalike_builder:planner"
+  }
+]

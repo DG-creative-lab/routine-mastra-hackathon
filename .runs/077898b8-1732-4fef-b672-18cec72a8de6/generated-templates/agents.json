@@ -1,0 +1,83 @@
+{
+  "agent_specs": [
+    {
+      "channel_id": "amc_lookalike_builder",
+      "agents": [
+        {
+          "role": "planner",
+          "name": "Planner",
+          "instructions": "Plan the creation of lookalike audiences in AMC",
+          "routine_steps": [
+            {
+              "tool": "amc.createlookalike",
+              "inputs": {
+                "seed_audience": "$seed_audience_id",
+                "lookalike_size": 1
+              },
+              "outputs": [
+                "lookalike_audience_id"
+              ]
+            }
+          ]
+        },
+        {
+          "role": "executor",
+          "name": "Executor",
+          "instructions": "Execute the creation of lookalike audiences safely",
+          "tools_allowed": [
+            "amc.createlookalike"
+          ],
+          "kpis": [
+            "lookalike_created",
+            "audience_size"
+          ]
+        },
+        {
+          "role": "critic",
+          "name": "Critic",
+          "guardrails": [
+            {
+              "type": "require_inputs",
+              "tool": "amc.createlookalike",
+              "keys": [
+                "seed_audience",
+                "lookalike_size"
+              ]
+            }
+          ],
+          "kpis": [
+            "lookalike_created",
+            "audience_size"
+          ]
+        },
+        {
+          "role": "observer",
+          "name": "Observer",
+          "observer": {
+            "sinks": [
+              {
+                "type": "console"
+              },
+              {
+                "type": "jsonl",
+                "path": ".runs/observer-events.jsonl"
+              }
+            ],
+            "events": [
+              "plan_started",
+              "plan_finished",
+              "step_started",
+              "step_finished",
+              "tool_called",
+              "tool_result"
+            ],
+            "kpis": [
+              "lookalike_created",
+              "audience_size"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

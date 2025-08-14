@@ -1,4 +1,3 @@
-// tailwind.config.ts (Tailwind v3.x)
 import type { Config } from "tailwindcss";
 import animate from "tailwindcss-animate";
 
@@ -9,7 +8,7 @@ const config: Config = {
     "./components/**/*.{ts,tsx}",
     "./lib/**/*.{ts,tsx}",
     "./src/**/*.{ts,tsx}",
-    "./docs/**/*.{ts,tsx,md,mdx}", // if you render docs content
+    "./docs/**/*.{ts,tsx,md,mdx}",
   ],
   theme: {
     extend: {

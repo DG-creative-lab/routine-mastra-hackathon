@@ -1,0 +1,34 @@
+{
+  "amc_lookalike_builder": {
+    "tagline": "Build lookalike audiences from high-value purchasers",
+    "required_features": {
+      "source_audience": "existing_purchasers",
+      "target_similarity": 0.01,
+      "channel": "auto"
+    },
+    "success_metrics": {
+      "audience_size": 500000,
+      "match_rate": 0.85
+    },
+    "timeline": {
+      "build_duration": [
+        "24h"
+      ],
+      "activation_window": [
+        "48h"
+      ]
+    },
+    "tools": {
+      "amc.createlookalike": {
+        "inputs": {
+          "source_seed": "purchaser_segment_id",
+          "lookalike_ratio": "0.01",
+          "target_countries": "auto"
+        },
+        "outputs": {
+          "lookalike_audience_id": "generated_audience_id"
+        }
+      }
+    }
+  }
+}

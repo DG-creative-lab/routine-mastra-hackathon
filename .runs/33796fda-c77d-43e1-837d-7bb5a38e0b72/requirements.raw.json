@@ -1,0 +1,52 @@
+{
+  "search_bid_guardian": {
+    "tagline": "Reduce Google Ads bids by 20% for underperforming campaigns (ROAS < 3)",
+    "required_features": {
+      "ga4_access": true,
+      "gads_write_access": true,
+      "roas_threshold": 3,
+      "bid_reduction_pct": 20
+    },
+    "success_metrics": {
+      "campaigns_updated": ">0",
+      "avg_bid_reduction_pct": 20
+    },
+    "timeline": {
+      "hourly": ["ga4.pull", "compute.check", "gAds.updateBid", "bigquery.logDealPatch"]
+    },
+    "tools": {
+      "ga4.pull": {
+        "title": "Fetch GA4 campaign metrics",
+        "outputs": {
+          "campaign_id": "string",
+          "roas": "number"
+        }
+      },
+      "compute.check": {
+        "title": "Filter campaigns below ROAS threshold",
+        "inputs": {
+          "roas": "number",
+          "threshold": "number"
+        },
+        "outputs": {
+          "should_adjust": "boolean"
+        }
+      },
+      "gAds.updateBid": {
+        "title": "Reduce bid by percentage",
+        "inputs": {
+          "campaign_id": "string",
+          "reduce_pct": "number"
+        }
+      }
+    },
+    "observer_hints": {
+      "sinks": [
+        {
+          "type": "jsonl",
+          "url": "gs://bid-logs/roas_adjustments.jsonl"
+        }
+      ]
+    }
+  }
+}
