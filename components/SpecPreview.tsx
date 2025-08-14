@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { putArtifacts } from "@/lib/artifacts-cache";
-import { postGenerateReuse } from "@/lib/api"; // ✅ correct import
+import { postGenerateReuse } from "@/lib/api";
 
 type Props = {
   runId?: string;
@@ -37,13 +37,10 @@ export default function SpecPreview({ runId, spec, onGenerated, className }: Pro
     }
     setGenerating(true);
     try {
-      // Your API expects just the runId to reuse the already-specified spec.
-      // It returns at least { runId, tree }; some builds also include { files }.
       const res = await postGenerateReuse({ runId });
 
-      // If your backend returns inlined files, stash them for instant preview.
-      // Safe no-op if res.files is undefined.
-      // @ts-expect-error — tolerate optional files in different backends
+      // If the backend returns inlined files, cache them for instant preview (safe no-op otherwise).
+      // @ts-expect-error tolerate optional files in different backends
       if (res?.files) putArtifacts(res.runId, { tree: res.tree as FsNode, files: res.files });
 
       onGenerated?.({ runId: res.runId, tree: res.tree as FsNode });
@@ -60,6 +57,7 @@ export default function SpecPreview({ runId, spec, onGenerated, className }: Pro
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Spec preview</CardTitle>
       </CardHeader>
+
       <CardContent className="pt-0 space-y-3">
         {!spec ? (
           <div className="text-sm text-muted-foreground">
@@ -67,12 +65,21 @@ export default function SpecPreview({ runId, spec, onGenerated, className }: Pro
           </div>
         ) : (
           <>
-            <div className="rounded-xl border bg-slate-50 p-3 max-h-[420px] overflow-auto">
-              <pre className="text-xs whitespace-pre-wrap">{pretty}</pre>
+            {/* Match the look of the Describe box (works in dark & light) */}
+            <div className="rounded-xl border border-border bg-muted p-3">
+              <textarea
+                readOnly
+                spellCheck={false}
+                value={pretty}
+                className="h-[420px] w-full resize-none bg-transparent outline-none font-mono text-xs leading-relaxed text-foreground"
+                aria-label="Spec JSON preview"
+              />
             </div>
+
             <Separator />
+
             <div className="flex items-center justify-between gap-2">
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-muted-foreground">
                 Run: <span className="font-mono">{runId ?? "—"}</span>
               </div>
               <Button onClick={handleGenerate} disabled={generating || !runId || !spec}>
