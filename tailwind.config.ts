@@ -1,12 +1,16 @@
+// tailwind.config.ts (Tailwind v3.x)
 import type { Config } from "tailwindcss";
-import animate from "tailwindcss-animate"; // ESM import (no require)
+import animate from "tailwindcss-animate";
 
 const config: Config = {
   darkMode: ["class"],
   content: [
-  "./app/**/*.{ts,tsx}", 
-  "./components/**/*.{ts,tsx}"
-],
+    "./app/**/*.{ts,tsx}",
+    "./components/**/*.{ts,tsx}",
+    "./lib/**/*.{ts,tsx}",
+    "./src/**/*.{ts,tsx}",
+    "./docs/**/*.{ts,tsx,md,mdx}", // if you render docs content
+  ],
   theme: {
     extend: {
       colors: {
