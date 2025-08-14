@@ -58,7 +58,7 @@
     "lib/**/*",
     "src/**/*",
     ".next/types/**/*.ts",
-    "postcss.config.cjs",
+    "postcss.config.js",
     "next-env.d.ts"
 , "next.config.js", "eslint.config.js"  ],
   "exclude": ["dist", "node_modules", "generated-templates"]
