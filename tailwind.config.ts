@@ -3,7 +3,10 @@ import animate from "tailwindcss-animate"; // ESM import (no require)
 
 const config: Config = {
   darkMode: ["class"],
-  content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
+  content: [
+  "./app/**/*.{ts,tsx}", 
+  "./components/**/*.{ts,tsx}"
+],
   theme: {
     extend: {
       colors: {
