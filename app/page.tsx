@@ -1,4 +1,3 @@
-// app/page.tsx
 "use client";
 
 import { useMemo, useState } from "react";
@@ -10,16 +9,14 @@ import ResultsExplorer from "@/components/ResultsExplorer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Channel, FsNode } from "@/lib/types";
 import ExamplesCard from "@/components/ExamplesCard";
-import { postSpecify } from "@/lib/api";
-import { toast } from "sonner";
 
 export default function Page() {
-  const [runId, setRunId] = useState<string | undefined>();
-  const [spec, setSpec]   = useState<unknown | undefined>();
-  const [tree, setTree]   = useState<FsNode | undefined>();
+  const [runId, setRunId] = useState<string | undefined>(undefined);
+  const [spec, setSpec] = useState<unknown | undefined>(undefined);
+  const [tree, setTree] = useState<FsNode | undefined>(undefined);
   const [selectedChannels] = useState<Channel[]>([]);
-  const [promptText, setPromptText] = useState("");
 
+  const [promptText, setPromptText] = useState("");
   const hintChannels = useMemo(() => selectedChannels, [selectedChannels]);
 
   const onSpecified = (res: { runId: string; spec: unknown }) => {
@@ -30,28 +27,8 @@ export default function Page() {
 
   const onGenerated = (res: { runId: string; tree: FsNode }) => {
     setRunId(res.runId);
-    setTree(res.tree);
+    setTree(res.tree); // ResultsExplorer now relies on initialTree (no auto-fetch)
   };
-
-  // NEW: Preview an example PROMPT by calling /api/specify
-  async function previewPrompt(text: string, channels?: string[]) {
-    try {
-      const res = await postSpecify({ text, channels });
-      setPromptText(text);       // optional: fill the prompt area
-      setRunId(res.runId);
-      setSpec(res.spec);
-      setTree(undefined);
-    } catch (e: any) {
-      toast.error("Preview failed", { description: String(e?.message ?? e) });
-    }
-  }
-
-  // Optional: when previewing a raw JSON spec, give it a local run id
-  function previewSpecLocal(s: unknown) {
-    setRunId(crypto.randomUUID());
-    setSpec(s);
-    setTree(undefined);
-  }
 
   return (
     <section className="space-y-4">
@@ -61,8 +38,10 @@ export default function Page() {
           <TabsTrigger value="upload">Upload spec</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="describe" className="mt-4">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-stretch">
+        {/* ===== Describe mode ===== */}
+        <TabsContent value="describe" className="mt-4 space-y-4">
+          {/* Top row: Describe + Spec preview */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
             <div className="flex flex-col">
               <PromptForm
                 text={promptText}
@@ -73,39 +52,64 @@ export default function Page() {
             </div>
 
             <div className="flex flex-col">
-              <SpecPreview runId={runId} spec={spec} onGenerated={onGenerated} className="h-full" />
-            </div>
-
-            <div className="flex flex-col">
-              <ResultsExplorer runId={runId} initialTree={tree} className="h-full" />
-            </div>
-
-            <div className="lg:col-span-3">
-              <ToolCatalog
-                selectedChannels={hintChannels}
-                onInsertTool={(tool) =>
-                  setPromptText((t) => (t ? `${t}\nUse tool: ${tool.id}` : `Use tool: ${tool.id}`))
-                }
-              />
-              <ExamplesCard
-                onPreviewPrompt={previewPrompt}
-                onPreviewSpec={previewSpecLocal}
+              <SpecPreview
+                runId={runId}
+                spec={spec}
+                onGenerated={onGenerated}
+                className="h-full"
               />
             </div>
           </div>
+
+          {/* Row 2: Results (full width) */}
+          <div>
+            <ResultsExplorer runId={runId} initialTree={tree} className="h-full" />
+          </div>
+
+          {/* Row 3: Tools + Examples (full width) */}
+          <div className="space-y-4">
+            <ToolCatalog
+              selectedChannels={hintChannels}
+              onInsertTool={(tool) =>
+                setPromptText((t) => (t ? `${t}\nUse tool: ${tool.id}` : `Use tool: ${tool.id}`))
+              }
+            />
+            <ExamplesCard onPreviewSpec={(spec) => setSpec(spec)} />
+          </div>
         </TabsContent>
 
-        <TabsContent value="upload" className="mt-4">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-stretch">
+        {/* ===== Upload mode (mirrors the new layout) ===== */}
+        <TabsContent value="upload" className="mt-4 space-y-4">
+          {/* Top row: Upload + Spec preview */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
             <div className="flex flex-col">
               <UploadSpec onGenerated={onGenerated} onPreviewSpec={(s) => setSpec(s)} />
             </div>
+
             <div className="flex flex-col">
-              <SpecPreview runId={runId} spec={spec} onGenerated={onGenerated} className="h-full" />
+              <SpecPreview
+                runId={runId}
+                spec={spec}
+                onGenerated={onGenerated}
+                className="h-full"
+              />
             </div>
-            <div className="flex flex-col">
-              <ResultsExplorer runId={runId} initialTree={tree} className="h-full" />
-            </div>
+          </div>
+
+          {/* Row 2: Results */}
+          <div>
+            <ResultsExplorer runId={runId} initialTree={tree} className="h-full" />
+          </div>
+
+          {/* Row 3: Tools + Examples */}
+          <div className="space-y-4">
+            <ToolCatalog
+              selectedChannels={hintChannels}
+              onInsertTool={(tool) =>
+                setPromptText((t) => (t ? `${t}\nUse tool: ${tool.id}` : `Use tool: ${tool.id}`))
+              }
+            />
+            <ExamplesCard onPreviewSpec={(spec) => setSpec(spec)} />
           </div>
         </TabsContent>
       </Tabs>

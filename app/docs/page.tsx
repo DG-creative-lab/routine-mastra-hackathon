@@ -6,7 +6,7 @@ import {
   Puzzle,
   Eye,
   FolderTree,
-  Download,
+  ClipboardCopy,
   FileUp,
   ListChecks,
   HelpCircle,
@@ -52,6 +52,7 @@ export default function DocsPage() {
       {/* Quickstart */}
       <section className={card()}>
         <h2 className="text-xl font-semibold mb-5 text-zinc-900 dark:text-white">Quickstart</h2>
+
         <div className="grid md:grid-cols-3 gap-4">
           <Step
             icon={<Search className="h-5 w-5" />}
@@ -82,9 +83,9 @@ export default function DocsPage() {
             body="Click Generate. Browse the file tree in Results to preview each file."
           />
           <Step
-            icon={<Download className="h-5 w-5" />}
-            title="6) Download"
-            body="Download ZIP and drop into your Mastra workspace. Wire secrets/creds and run."
+            icon={<ClipboardCopy className="h-5 w-5" />}
+            title="6) Preview / copy"
+            body="Open files in Results and copy content into your Mastra workspace. (ZIP export is disabled in this build.)"
           />
         </div>
 
@@ -161,9 +162,9 @@ Pull GA4 metrics, compare to threshold, then patch bids. Log changes.`}
             `}
           />
           <Mini
-            icon={<Download className="h-4 w-4" />}
-            title="Generate & download"
-            body="Same outputs as the describe flow—preview files, then ZIP."
+            icon={<ClipboardCopy className="h-4 w-4" />}
+            title="Generate & preview"
+            body="Same outputs as the describe flow — open files in Results and copy into your workspace."
           />
         </div>
       </section>
