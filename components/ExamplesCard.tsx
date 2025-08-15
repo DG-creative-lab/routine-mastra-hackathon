@@ -1,3 +1,4 @@
+// components/ExamplesCard.tsx
 "use client";
 
 import { useMemo, useState } from "react";
@@ -8,14 +9,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// --- minimal example data wiring (replace with your source if you already have one) ---
+type Channel = "Search" | "DV360" | "Meta" | "AMC";
+
 type Example = {
   id: string;
   title: string;
   tagline: string;
-  channel: "Search" | "DV360" | "Meta" | "AMC";
-  // a JSON blob per example to download/preview:
-  spec: unknown;
+  channel: Channel;
+  // Use exactly one of these:
+  prompt?: string;
+  spec?: unknown;
 };
 
 const EXAMPLES: Example[] = [
@@ -24,38 +27,45 @@ const EXAMPLES: Example[] = [
     title: "Search Bid Guardian",
     tagline: "Lower Google Ads bids whenever ROAS falls below a KPI threshold.",
     channel: "Search",
-    spec: { /* …your example spec object… */ },
+    prompt:
+      "Lower Google Ads bids by 20% for campaigns where yesterday's ROAS < 3. Pull GA4 metrics, compare to threshold, then patch bids. Log changes.",
   },
   {
     id: "dv360_deal_optimiser",
     title: "DV360 Deal Optimiser",
-    tagline: "Patch DV360 deal bids when CPM deviates > 15 % from baseline.",
+    tagline: "Patch DV360 deal bids when CPM deviates > 15% from baseline.",
     channel: "DV360",
-    spec: { /* … */ },
+    prompt:
+      "Reduce DV360 deal bids when CPM exceeds baseline by 15%. Use BigQuery export; write changes and log patches.",
   },
   {
     id: "meta_fatigue_swapper",
     title: "Meta Fatigue Swapper",
-    tagline: "Rotate creatives when frequency > 6 or audience < 50 k.",
+    tagline: "Rotate creatives when frequency > 6 or audience < 50k.",
     channel: "Meta",
-    spec: { /* … */ },
+    prompt:
+      "Rotate Meta creatives when frequency > 6 or audience size < 50k. Include logging of swaps.",
   },
   {
     id: "amc_lookalike_builder",
     title: "AMC Look-Alike Builder",
     tagline: "Weekly pipeline that builds SKU-seeded look-alikes in AMC.",
     channel: "AMC",
-    spec: { /* … */ },
+    prompt:
+      "Weekly pipeline: pull purchasers by SKU from AMC, normalise, build look-alike audiences; log outcomes.",
   },
 ];
 
 type Props = {
-  onPreviewSpec: (spec: unknown) => void;
+  // New: for prompt-based examples (most common)
+  onPreviewPrompt?: (text: string, channels?: string[]) => void;
+  // Kept: for raw-spec examples if you add any later
+  onPreviewSpec?: (spec: unknown) => void;
   className?: string;
 };
 
-export default function ExamplesCard({ onPreviewSpec, className }: Props) {
-  const [filter, setFilter] = useState<Example["channel"] | "">("");
+export default function ExamplesCard({ onPreviewPrompt, onPreviewSpec, className }: Props) {
+  const [filter, setFilter] = useState<Channel | "">("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const filtered = useMemo(
@@ -74,7 +84,13 @@ export default function ExamplesCard({ onPreviewSpec, className }: Props) {
   function downloadSelected() {
     if (!selected.size) return;
     const payload: Record<string, unknown> = {};
-    for (const e of EXAMPLES) if (selected.has(e.id)) payload[e.id] = e.spec;
+    for (const e of EXAMPLES) {
+      if (selected.has(e.id)) {
+        // If you only have prompts, you might skip including them,
+        // or call your /api/specify here to pre-generate files.
+        payload[e.id] = e.spec ?? { prompt: e.prompt };
+      }
+    }
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -90,9 +106,7 @@ export default function ExamplesCard({ onPreviewSpec, className }: Props) {
         <CardTitle className="text-base">Examples (optional)</CardTitle>
       </CardHeader>
 
-      {/* Content has regular bottom padding now so the footer never overlaps */}
       <CardContent className="pt-0 space-y-3">
-        {/* Filter chips */}
         <div className="flex flex-wrap gap-2">
           {(["Search", "DV360", "Meta", "AMC"] as const).map((ch) => (
             <Badge
@@ -104,27 +118,16 @@ export default function ExamplesCard({ onPreviewSpec, className }: Props) {
               {ch}
             </Badge>
           ))}
-          <button
-            className="text-sm text-muted-foreground hover:text-foreground ml-2"
-            onClick={() => setFilter("")}
-          >
+          <button className="text-sm text-muted-foreground hover:text-foreground ml-2" onClick={() => setFilter("")}>
             Clear
           </button>
         </div>
 
-        {/* Example rows */}
         <div className="space-y-2">
           {filtered.map((e) => (
-            <div
-              key={e.id}
-              className="flex items-center justify-between rounded-xl border p-3"
-            >
+            <div key={e.id} className="flex items-center justify-between rounded-xl border p-3">
               <div className="flex items-start gap-3 min-w-0">
-                <Checkbox
-                  checked={selected.has(e.id)}
-                  onCheckedChange={() => toggle(e.id)}
-                  className="mt-1"
-                />
+                <Checkbox checked={selected.has(e.id)} onCheckedChange={() => toggle(e.id)} className="mt-1" />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <div className="font-medium truncate">{e.title}</div>
@@ -132,9 +135,7 @@ export default function ExamplesCard({ onPreviewSpec, className }: Props) {
                       {e.channel}
                     </Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground truncate">
-                    {e.tagline}
-                  </p>
+                  <p className="text-sm text-muted-foreground truncate">{e.tagline}</p>
                 </div>
               </div>
 
@@ -142,28 +143,17 @@ export default function ExamplesCard({ onPreviewSpec, className }: Props) {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => onPreviewSpec(e.spec)}
+                  onClick={() => {
+                    if (e.spec && onPreviewSpec) onPreviewSpec(e.spec);
+                    else if (e.prompt && onPreviewPrompt) onPreviewPrompt(e.prompt, [e.channel]);
+                  }}
                   className="gap-1"
                 >
                   <Eye className="h-4 w-4" />
                   Preview
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const blob = new Blob([JSON.stringify({ [e.id]: e.spec }, null, 2)], {
-                      type: "application/json",
-                    });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `${e.id}.json`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                >
-                  Download
+                <Button variant="outline" size="sm" onClick={downloadSelected}>
+                  Download selected
                 </Button>
               </div>
             </div>
@@ -171,13 +161,10 @@ export default function ExamplesCard({ onPreviewSpec, className }: Props) {
         </div>
       </CardContent>
 
-      {/* Proper footer — no sticky, no overlap */}
       <CardFooter className="pt-3 border-t flex items-center justify-between">
-        <div className="text-xs text-muted-foreground">
-          Selected: {selected.size}
-        </div>
+        <div className="text-xs text-muted-foreground">Selected: {selected.size}</div>
         <Button onClick={downloadSelected} disabled={!selected.size}>
-          Download selected (.json)
+          Download (.json)
         </Button>
       </CardFooter>
     </Card>
