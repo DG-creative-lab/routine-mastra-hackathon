@@ -2,37 +2,35 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { FsNode } from "@/lib/types";
-import { fetchFile, fetchRunTree } from "@/lib/api";
-import { getTree as getCachedTree, getFile as getCachedFile } from "@/lib/artifacts-cache";
+import { fetchFile } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { File as FileIcon, Folder } from "lucide-react";
+import { File as FileIcon, Folder, Download } from "lucide-react";
 import { toast } from "sonner";
 
 type Props = {
   runId?: string;
-  initialTree?: FsNode;
+  initialTree?: FsNode;         // <- parent passes this after Generate
   className?: string;
 };
 
 export default function ResultsExplorer({ runId, initialTree, className }: Props) {
+  // Keep local state so we can preserve expanded/selected UI, but
+  // update it whenever parent gives us a new tree.
   const [tree, setTree] = useState<FsNode | undefined>(initialTree);
+  useEffect(() => {
+    setTree(initialTree);
+  }, [initialTree]);
+
   const [selectedPath, setSelectedPath] = useState<string>("");
   const [fileContent, setFileContent] = useState<string>("");
   const [loadingFile, setLoadingFile] = useState(false);
 
-  // Prefer cached tree (from generate), then fallback fetch
-  useEffect(() => {
-    if (!runId) return;
-    const cached = getCachedTree(runId);
-    if (cached) {
-      setTree(cached);
-      return;
-    }
-    fetchRunTree(runId).then(setTree).catch(() => {});
-  }, [runId]);
+  // 🔇 Removed: the old useEffect that fetched the tree on runId change.
+  // We now rely solely on `initialTree` coming from the parent via onGenerated.
 
   const badges = useMemo(() => {
     let hasCritics = false;
@@ -53,27 +51,31 @@ export default function ResultsExplorer({ runId, initialTree, className }: Props
     if (!runId) return;
     setLoadingFile(true);
     try {
-      // 1) try cache
-      const cached = getCachedFile(runId, path);
-      if (cached) {
-        setFileContent(cached.content);
-        setSelectedPath(path);
-        return;
-      }
-      // 2) fallback to API (dev/local)
       const res = await fetchFile(runId, path);
       if (res.type === "text") {
         setFileContent(res.content);
+        setSelectedPath(path);
       } else {
         setFileContent(`(binary: ${res.contentType})`);
+        setSelectedPath(path);
       }
-      setSelectedPath(path);
     } catch (e) {
       toast.error("Failed to open file", { description: String(e) });
     } finally {
       setLoadingFile(false);
     }
   }
+
+  // Keep the download button for later (hidden for now)
+  function downloadZip() {
+    if (!runId) return;
+    const a = document.createElement("a");
+    a.href = `/api/runs/${encodeURIComponent(runId)}/zip`;
+    a.download = `${runId}.zip`;
+    a.click();
+  }
+
+  const hasFiles = !!(tree && (tree.children?.length ?? 0) > 0);
 
   return (
     <Card className={`rounded-2xl shadow-sm h-full min-h-[240px] ${className ?? ""}`}>
@@ -82,17 +84,25 @@ export default function ResultsExplorer({ runId, initialTree, className }: Props
         <div className="flex items-center gap-2">
           {badges.hasCritics && <Badge variant="secondary">critics.ts</Badge>}
           {badges.hasObserver && <Badge variant="secondary">observer.ts</Badge>}
-          {/* ZIP download button intentionally hidden for now */}
+          {/* Hidden for now – leave in place for future ZIP download */}
+          <Button size="sm" onClick={downloadZip} className="hidden">
+            <Download className="h-4 w-4 mr-2" />
+            Download ZIP
+          </Button>
         </div>
       </CardHeader>
+
       <CardContent className="pt-0 grid grid-cols-1 lg:grid-cols-3 gap-3">
         <ScrollArea className="max-h-[420px] rounded-xl border p-2">
-          {!tree ? (
-            <div className="p-2 text-sm text-muted-foreground">No files yet.</div>
+          {!hasFiles ? (
+            <div className="p-2 text-sm text-muted-foreground">
+              No files yet.
+              {runId ? " Click Generate to produce files." : " Create a spec and generate to see files here."}
+            </div>
           ) : (
             <div className="text-sm">
               <TreeNode
-                node={tree}
+                node={tree as FsNode}
                 depth={0}
                 onOpen={openFile}
                 activePath={selectedPath}
@@ -102,18 +112,16 @@ export default function ResultsExplorer({ runId, initialTree, className }: Props
         </ScrollArea>
 
         <div className="lg:col-span-2">
-          <div className="rounded-xl border border-white/10 bg-transparent p-3 max-h-[420px] overflow-auto">
+          <div className="rounded-xl border bg-slate-50 dark:bg-muted p-3 max-h-[420px] overflow-auto">
             {!selectedPath ? (
-              <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-muted-foreground">
+              <div className="text-sm text-muted-foreground">
                 Select a file to preview.
               </div>
             ) : loadingFile ? (
-              <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-muted-foreground">
-                Loading file…
-              </div>
+              <div className="text-sm text-muted-foreground">Loading file…</div>
             ) : (
               <>
-                <div className="mb-2 text-xs text-slate-500">
+                <div className="mb-2 text-xs text-slate-500 dark:text-muted-foreground">
                   <span className="font-mono">{selectedPath}</span>
                 </div>
                 <Separator className="mb-3" />
@@ -121,7 +129,7 @@ export default function ResultsExplorer({ runId, initialTree, className }: Props
               </>
             )}
           </div>
-          <div className="mt-2 text-xs text-slate-500">
+          <div className="mt-2 text-xs text-slate-500 dark:text-muted-foreground">
             Run: <span className="font-mono">{runId ?? "—"}</span>
           </div>
         </div>
@@ -146,14 +154,14 @@ function TreeNode({
     const active = activePath === node.path;
     return (
       <div
-        className={`flex items-center gap-2 rounded-md px-2 py-1 cursor-pointer hover:bg-slate-100 ${
-          active ? "bg-slate-100" : ""
+        className={`flex items-center gap-2 rounded-md px-2 py-1 cursor-pointer hover:bg-slate-100 dark:hover:bg-muted ${
+          active ? "bg-slate-100 dark:bg-muted" : ""
         }`}
         style={pad}
         onClick={() => onOpen(node.path)}
       >
         <FileIcon className="h-4 w-4" />
-        <span className="font-mono text-xs">{node.name}</span>
+        <span className="font-mono text-xs truncate">{node.name}</span>
       </div>
     );
   }

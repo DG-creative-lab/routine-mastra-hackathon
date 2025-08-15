@@ -27,7 +27,7 @@ export default function Page() {
 
   const onGenerated = (res: { runId: string; tree: FsNode }) => {
     setRunId(res.runId);
-    setTree(res.tree);
+    setTree(res.tree); // ResultsExplorer now relies on initialTree (no auto-fetch)
   };
 
   return (
@@ -38,9 +38,10 @@ export default function Page() {
           <TabsTrigger value="upload">Upload spec</TabsTrigger>
         </TabsList>
 
-        {/* Describe mode */}
-        <TabsContent value="describe" className="mt-4">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-stretch">
+        {/* ===== Describe mode ===== */}
+        <TabsContent value="describe" className="mt-4 space-y-4">
+          {/* Top row: Describe + Spec preview */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
             <div className="flex flex-col">
               <PromptForm
                 text={promptText}
@@ -48,7 +49,6 @@ export default function Page() {
                 onSpecified={onSpecified}
                 className="h-full"
               />
-              
             </div>
 
             <div className="flex flex-col">
@@ -59,39 +59,33 @@ export default function Page() {
                 className="h-full"
               />
             </div>
+          </div>
 
-            <div className="flex flex-col">
-              <ResultsExplorer
-                runId={runId}
-                initialTree={tree}
-                className="h-full"
-              />
-            </div>
+          {/* Row 2: Results (full width) */}
+          <div>
+            <ResultsExplorer runId={runId} initialTree={tree} className="h-full" />
+          </div>
 
-            {/* Tools browser sits as a full-width row under the 3 cards */}
-            <div className="lg:col-span-3">
-              <ToolCatalog
-                selectedChannels={hintChannels}
-                onInsertTool={(tool) =>
-                  setPromptText((t) =>
-                    t ? `${t}\nUse tool: ${tool.id}` : `Use tool: ${tool.id}`
-                  )
-                }
-              />
-              <ExamplesCard onPreviewSpec={(spec) => setSpec(spec)} />
-            </div>
+          {/* Row 3: Tools + Examples (full width) */}
+          <div className="space-y-4">
+            <ToolCatalog
+              selectedChannels={hintChannels}
+              onInsertTool={(tool) =>
+                setPromptText((t) => (t ? `${t}\nUse tool: ${tool.id}` : `Use tool: ${tool.id}`))
+              }
+            />
+            <ExamplesCard onPreviewSpec={(spec) => setSpec(spec)} />
           </div>
         </TabsContent>
 
-        {/* Upload mode */}
-        <TabsContent value="upload" className="mt-4">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:items-stretch">
+        {/* ===== Upload mode (mirrors the new layout) ===== */}
+        <TabsContent value="upload" className="mt-4 space-y-4">
+          {/* Top row: Upload + Spec preview */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
             <div className="flex flex-col">
-              <UploadSpec
-                onGenerated={onGenerated}
-                onPreviewSpec={(s) => setSpec(s)}
-              />
+              <UploadSpec onGenerated={onGenerated} onPreviewSpec={(s) => setSpec(s)} />
             </div>
+
             <div className="flex flex-col">
               <SpecPreview
                 runId={runId}
@@ -100,13 +94,22 @@ export default function Page() {
                 className="h-full"
               />
             </div>
-            <div className="flex flex-col">
-              <ResultsExplorer
-                runId={runId}
-                initialTree={tree}
-                className="h-full"
-              />
-            </div>
+          </div>
+
+          {/* Row 2: Results */}
+          <div>
+            <ResultsExplorer runId={runId} initialTree={tree} className="h-full" />
+          </div>
+
+          {/* Row 3: Tools + Examples */}
+          <div className="space-y-4">
+            <ToolCatalog
+              selectedChannels={hintChannels}
+              onInsertTool={(tool) =>
+                setPromptText((t) => (t ? `${t}\nUse tool: ${tool.id}` : `Use tool: ${tool.id}`))
+              }
+            />
+            <ExamplesCard onPreviewSpec={(spec) => setSpec(spec)} />
           </div>
         </TabsContent>
       </Tabs>
